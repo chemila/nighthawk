@@ -317,4 +317,20 @@ class Env {
     public function getSHMSize() {
         return Config::getInstance()->get('master.shm_size', self::DEFAULT_SHM_SIZE);
     }
-} 
+
+    /**
+     * @desc get message queue resource
+     * @return resource
+     */
+    public function getMsgQueue() {
+        return msg_get_queue($this->getIPCKey());
+    }
+
+    /**
+     * @desc get shared memory resource
+     * @return resource
+     */
+    public function getShm() {
+        return shm_attach($this->getIPCKey(), self::DEFAULT_SHM_SIZE);
+    }
+}

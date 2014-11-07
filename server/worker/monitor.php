@@ -10,13 +10,9 @@ use NHK\system\Task;
 class Monitor extends Worker {
     const INTERVAL_MASTER_HEATBEAT = 60;
 
-    public function start() {
+    public function run() {
         $task = Task::getInstance();
         $task->add('heatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
-        for (; ;) {
-            sleep(1);
-            pcntl_signal_dispatch();
-        }
     }
 
     public function checkHeatBeat() {

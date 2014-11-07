@@ -1,7 +1,6 @@
 <?php
 namespace NHK\Server;
 
-use NHK\Server\Worker\Monitor;
 use NHK\System\Config;
 use NHK\System\Core;
 use NHK\System\Env;
@@ -96,8 +95,8 @@ class Master {
      */
     function __construct() {
         $this->_IPCKey = Env::getInstance()->getIPCKey();
-        $this->_shm = shm_attach($this->_IPCKey, Env::getInstance()->getSHMSize());
-        $this->_msg = msg_get_queue($this->_IPCKey);
+        $this->_shm = Env::getInstance()->getShm();
+        $this->_msg = Env::getInstance()->getMsgQueue();
         $this->_pidFile = Env::getInstance()->getPIDFile();
         Process::setProcessTitle(Core::PRODUCT_NAME . ':master');
     }
@@ -273,9 +272,13 @@ class Master {
             return $pid;
         }
 
+        $bindSocket = false;
         foreach (self::$_sockets as $key => $socket) {
             if ($name !== $key) {
                 unset(self::$_sockets[$key]);
+            }
+            else {
+                $bindSocket = $socket;
             }
         }
 
@@ -285,12 +288,12 @@ class Master {
 
             return false;
         }
-        /** @var Worker $worker */
-        $worker = new $workerClass($name);
-        $worker->start();
 
+        /** @var Worker $worker */
+        $worker = new $workerClass($name, $bindSocket);
         Process::setProcessTitle(Core::PRODUCT_NAME . '_' . $worker->getName());
         Process::closeSTD();
+        $worker->start();
 
         return false;
     }
