@@ -45,7 +45,6 @@ class Config {
     protected function parseFile($file) {
         $array = parse_ini_file($file, true);
         if (!is_array($array) || empty($array)) {
-            var_dump($file);
             throw new \Exception('Invalid configuration format');
         }
 

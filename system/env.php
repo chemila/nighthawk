@@ -86,7 +86,7 @@ class Env {
      * @return string
      */
     public static function getVersion() {
-        return self::VERSION;
+        printf("%s\n", self::VERSION);
     }
 
     /**
@@ -234,7 +234,6 @@ class Env {
     public function checkPidFile() {
         $pidFile = $this->getPIDFile();
         $dir = dirname($pidFile);
-
         if (!is_dir($dir)) {
             $this->_addError('nhk.pid directory not exist', self::ERROR_FATAL);
 
@@ -259,7 +258,7 @@ class Env {
      * @return string
      */
     public function getPIDFile() {
-        return Config::getInstance()->get('master.pid_file', '/var/run/nhk.pid');
+        return Config::getInstance()->get('master.pid_file', NHK_PATH_ROOT . 'data/master.pid');
     }
 
     /**

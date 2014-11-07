@@ -8,11 +8,15 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * @package NHK\System
  */
 class Core {
+    /**
+     * @desc namespace prefix
+     */
     const NHK_NAMESPACE = 'nhk';
+    const PRODUCT_NAME = 'nighthawk';
     /**
      * @var  array  PHP error code => human readable name
      */
-    public static $php_errors
+    public static $phpErrors
         = array(
             E_ERROR => 'Fatal Error',
             E_USER_ERROR => 'User Error',
@@ -22,28 +26,31 @@ class Core {
             E_STRICT => 'Strict',
             E_NOTICE => 'Notice',
             E_RECOVERABLE_ERROR => 'Recoverable Error',
+            E_DEPRECATED => 'Deprecated',
         );
-
-    /**
-     * @var array
-     */
-    protected static $_paths = array(NHK_PATH_SERVER, NHK_PATH_SYSTEM);
 
     /**
      * @var  array  types of errors to display at shutdown
      */
-    public static $shutdown_errors = array(E_PARSE, E_ERROR, E_USER_ERROR, E_COMPILE_ERROR);
+    public static $shutdownErrors = array(E_PARSE, E_ERROR, E_USER_ERROR, E_COMPILE_ERROR);
 
     /**
      * @var bool
      */
     protected static $_init = false;
 
+    protected static $_isDebug = false;
+
+    /**
+     * @desc setup handlers
+     */
     public static function init() {
         if (Core::$_init) {
             // Do not allow execution twice
             return;
         }
+
+        Core::$_isDebug = Config::getInstance()->get('master.debug', false);
 
         // Core is now initialized
         Core::$_init = true;
@@ -108,7 +115,6 @@ class Core {
     public static function findFile($file) {
         // Create a partial path of the filename
         $path = NHK_PATH_ROOT . $file . '.php';
-
         if (is_file($path)) {
             return $path;
         }
@@ -122,13 +128,9 @@ class Core {
      * @return bool
      * @throws Exception
      */
-    public
-    static function errorHandler(
-        $code, $error, $file = null, $line = null
-    ) {
+    public static function errorHandler($code, $error, $file = null, $line = null) {
         if (error_reporting() & $code) {
-            // This error is not suppressed by current error reporting settings
-            // Convert the error into an ErrorException
+            self::alert(sprintf("file [%s] line [%s] exception [%s]", $file, $line, $error));
             throw new Exception($error, $code, 0, $file, $line);
         }
 
@@ -143,6 +145,7 @@ class Core {
         try {
             // Create a text version of the exception
             $error = Core::displayException($e);
+
             Log::write($error);
 
             return true;
@@ -156,13 +159,16 @@ class Core {
         }
     }
 
+    /**
+     * @desc shutdown hook
+     */
     public static function shutdownHandler() {
         if (!Core::$_init) {
             // Do not execute when not active
             return;
         }
 
-        if ($error = error_get_last() AND in_array($error['type'], Core::$shutdown_errors)) {
+        if ($error = error_get_last() AND in_array($error['type'], Core::$shutdownErrors)) {
             // Fake an exception for nice debugging
             Core::exceptionHandler(
                 new Exception($error['message'], $error['type'], 0, $error['file'], $error['line'])
@@ -178,9 +184,34 @@ class Core {
      * @return string
      */
     public static function displayException(\Exception $e) {
+        $code = $e->getCode();
+        if (isset(self::$phpErrors[$code])) {
+            $code = self::$phpErrors[$code];
+        }
+
         return sprintf(
             '%s [ %s ]: %s ~ %s [ %d ]',
-            get_class($e), $e->getCode(), strip_tags($e->getMessage()), $e->getFile(), $e->getLine()
+            get_class($e), $code, strip_tags($e->getMessage()), $e->getFile(), $e->getLine()
         );
+    }
+
+    /**
+     * @param      $message
+     * @param bool $isError
+     */
+    public static function alert($message, $isError = true) {
+        if (true === $isError) {
+            printf("\033[31;40m%s\033[0m\n", $message);
+        }
+        else {
+            printf("\033[32;49m%s\033[0m\n", $message);
+        }
+    }
+
+    /**
+     * @return bool
+     */
+    public static function getDebugMode() {
+        return (bool)self::$_isDebug;
     }
 }

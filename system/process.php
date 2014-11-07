@@ -1,5 +1,8 @@
 <?php
 namespace NHK\System;
+
+use NHK\System\Core;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 /**
@@ -22,20 +25,6 @@ class Process {
     const PROCESS_NOT_RUNNING = -3;
 
     /**
-     * @param      $message
-     * @param bool $andExit
-     */
-    public static function alert($message, $andExit = true) {
-        if (true === $andExit) {
-            printf("\033[31;40m%s\033[0m\n", $message);
-            exit(1);
-        }
-        else {
-            printf("\033[32;49m%s\033[0m\n", $message);
-        }
-    }
-
-    /**
      * @return int
      */
     public static function checkProcess() {
@@ -53,6 +42,19 @@ class Process {
         }
 
         return $pid;
+    }
+
+    /**
+     * @return bool|int
+     */
+    public static function isMasterRunning() {
+        $pidFile = Env::getInstance()->getPIDFile();
+        $oldPid = file_get_contents($pidFile);
+        if ($oldPid !== false && posix_kill(trim($oldPid), 0)) {
+            return $oldPid;
+        }
+
+        return false;
     }
 
     /**
@@ -120,7 +122,7 @@ class Process {
         $clientAddress = Config::getInstance()->get('monitor.listen');
         $sock = @stream_socket_client($clientAddress);
         if (!$sock) {
-            self::alert("socket client address not exist");
+            Core::alert("socket client address not exist");
         }
         fwrite($sock, 'status');
         $reads = array($sock);
@@ -139,5 +141,33 @@ class Process {
                 }
             }
         }
+    }
+
+    public static function closeSTD() {
+        global $STDERR, $STDOUT;
+
+        if (Core::getDebugMode() && posix_ttyname(STDOUT)) {
+            return true;
+        }
+
+        @fclose(STDOUT);
+        @fclose(STDERR);
+
+        $STDOUT = fopen('/dev/null', "rw+");
+        $STDERR = fopen('/dev/null', "rw+");
+    }
+
+    public static function setProcessTitle($title) {
+        if (extension_loaded('proctitle') && function_exists('setproctitle')) {
+            @setproctitle($title);
+            return true;
+        }
+
+        if (function_exists('cli_set_process_title')) {
+            @cli_set_process_title($title);
+            return true;
+        }
+
+        return false;
     }
 }
