@@ -145,7 +145,7 @@ class Core {
         try {
             // Create a text version of the exception
             $error = Core::displayException($e);
-
+            self::alert($error);
             Log::write($error);
 
             return true;
