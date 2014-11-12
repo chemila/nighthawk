@@ -23,4 +23,22 @@ class Monitor extends Worker {
             Log::write('master is dead');
         }
     }
+
+    /**
+     * @param $buff
+     * @return int|false
+     */
+    public function parseInput($buff) {
+        // TODO: Implement parseInput() method.
+        return 0;
+    }
+
+    /**
+     * @param $buff
+     * @return mixed
+     */
+    public function dealBussiness($buff) {
+        // TODO: Implement dealBussiness() method.
+        Core::alert('deal bussiness on: ' . $buff, false);
+    }
 }

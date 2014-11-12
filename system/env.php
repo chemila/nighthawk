@@ -24,6 +24,9 @@ class Env {
      * @desc level fatal
      */
     const ERROR_FATAL = 2;
+
+    const MSG_TYPE_STATUS = 1;
+    const MSG_TYPE_FILES = 2;
     /**
      * @var array
      */

@@ -16,8 +16,17 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * @package NHK\Server
  */
 abstract class Worker {
+    /**
+     *
+     */
     const PREREAD_BUFFER_LENGTH = 4;
+    /**
+     *
+     */
     const PACKAGE_MAX_LENGTH = 65535;
+    /**
+     *
+     */
     const STREAM_MAX_LENGTH = 1024000;
     /**
      *
@@ -26,7 +35,11 @@ abstract class Worker {
     /**
      *
      */
-    const MSGTYPE_STATUS = 1;
+    const STATE_RUNNING = 2;
+    /**
+     *
+     */
+    const STATE_SHUTDOWN = 4;
 
     /**
      * @var
@@ -36,6 +49,9 @@ abstract class Worker {
      * @var resource
      */
     protected $_socket;
+    /**
+     * @var bool|string
+     */
     protected $_isPersist = false;
     /**
      * @var array
@@ -53,36 +69,56 @@ abstract class Worker {
      * @var array
      */
     protected $_connections = array();
+    /**
+     * @var array
+     */
     protected $_bufferSend = array();
+    /**
+     * @var array
+     */
     protected $_bufferRecv = array();
+    /**
+     * @var
+     */
     protected $_currentConn;
+    /**
+     * @var WorkerStatus
+     */
+    protected $_status;
+    /**
+     * @var
+     */
+    protected $_runState;
 
     /**
      * @param      $name
      * @param null $socket
      * @throws Exception
      */
-    function __construct($name, $socket = null) {
+    function __construct($name, $socket) {
         $this->_name = $name;
-        if (is_resource($socket)) {
-            $this->_socket = $socket;
+
+        if (!is_resource($socket)) {
+            throw new Exception('invalid socket');
         }
 
+        $this->_socket = $socket;
         $socketStat = socket_get_status($socket);
         if (!$socketStat) {
             throw new Exception('invalid socket');
         }
-
         socket_set_blocking($this->_socket, 0);
         $this->_protocal = substr($socketStat['stream_type'], 0, 3);
-        $this->_eventBase = new Event();
         $this->_isPersist = Config::getInstance()->get($name . 'persistent_connection', false);
+        $this->_eventBase = new Event();
+        $this->_status = new WorkerStatus();
     }
 
     /**
      *
      */
     public function start() {
+        $this->_status->startTime = time();
         $this->installSignal();
         $this->installEvent();
 
@@ -142,7 +178,14 @@ abstract class Worker {
 
         $current = intval($conn);
         $this->_connections[$current] = $conn;
-        $this->_bufferRecv[$current] = new Buffer();
+        if ($this->_isPersist) {
+            $prereadLen = 65535;
+        }
+        else {
+            $prereadLen = Config::getInstance()->get($this->_name . '.preread_lentgh', 4);
+        }
+
+        $this->_bufferRecv[$current] = new Buffer($prereadLen);
         Core::alert('accept address:' . $address, false);
 
         if (!$this->_eventBase->add($address, $conn, EV_READ, array($this, 'processTcpInput'), array($address))) {
@@ -153,59 +196,80 @@ abstract class Worker {
     }
 
     /**
-     * @param $fd
+     * @param $connection
      * @param $events
      * @param $args
      */
-    public function processTcpInput($fd, $events, $args) {
+    public function processTcpInput($connection, $events, $args) {
         Core::alert('process on: ' . $args[0], false);
-        $current = intval($fd);
+
+        if ($this->_runState == self::STATE_SHUTDOWN) {
+            $this->stop();
+            pcntl_alarm(self::EXIT_WAIT_TIME); //TODO: deal SIGALARM
+            return false;
+        }
+
+        $current = intval($connection);
 
         /** @var Buffer $receiveBuffer */
         $receiveBuffer = $this->_bufferRecv[$current];
         /** @var Buffer $sendBuffer */
         $sendBuffer = $this->_bufferSend[$current];
 
-        $content = stream_socket_recvfrom($fd, $receiveBuffer->getRemainLength());
-        if ('' === $content || '' === fread($fd, $receiveBuffer->getRemainLength())) {
-            if (!$receiveBuffer->isEmpty()) {
-                Core::alert('send data failed');
+        $content = stream_socket_recvfrom($connection, $receiveBuffer->getRemainLength());
+        if ('' === $content || '' === fread($connection, $receiveBuffer->getRemainLength())) {
+            if (!feof($connection)) {
+                //NOTE: not closed by client yet, try again
+                return false;
             }
 
-            Core::alert('client closed', false);
-            $this->closeClient($current);
+            $this->_status->incre('clientCloseCnt');
+
+            if (!$receiveBuffer->isEmpty()) {
+                Core::alert('no data received, and closed by client');
+            }
+
+            Core::alert('close connection now', false);
+            $this->closeConnection($current);
         }
         else {
-            $remainLen = $this->parseInput($content);
-            $receiveBuffer->receive($content, $remainLen);
+            $result = $this->parseInput($content);
+            if (false === $result || $result < 0) {
+                Core::alert('parse input failed');
+                return false;
+            }
+
+            $receiveBuffer->receive($content, $result);
 
             if ($receiveBuffer->isDone()) {
+                Core::alert('receive buffer done', false);
+                $this->dealBussiness($receiveBuffer->content);
+
                 if ($this->_isPersist) {
                     $receiveBuffer->reset();
                 }
                 else {
                     if ($sendBuffer->isEmpty()) {
-                        $this->closeClient($current);
+                        $this->closeConnection($current);
                     }
                 }
             }
-            elseif ($remainLen > 0) {
-                $receiveBuffer->remainLength = $remainLen;
-            }
-            else {
-                Core::alert('input parse error');
-                $this->closeClient($fd);
-            }
-
-            fwrite($fd, 'received:' . $receiveBuffer->content);
         }
     }
 
-    public function parseInput($buff) {
-        return '';
-    }
+    /**
+     * @param $buff
+     * @return int|false
+     */
+    abstract public function parseInput($buff);
 
     /**
+     * @param $buff
+     * @return mixed
+     */
+    abstract public function dealBussiness($buff);
+
+/**
      *
      */
     public function recvUdp() {
@@ -300,58 +364,164 @@ abstract class Worker {
         fwrite($this->_socket, 'hello');
     }
 
-    protected function closeClient($fd) {
-        $fd = intval($fd);
+    /**
+     * @param $connection
+     * @return bool
+     */
+    protected function closeConnection($connection) {
+        $connection = intval($connection);
 
-        if ($this->_protocal != 'udp' && isset($this->_connections[$fd])) {
-            $this->_eventBase->remove($this->_connections[$fd], EV_READ);
-            $this->_eventBase->remove($this->_connections[$fd], EV_WRITE);
-            fclose($this->_connections[$fd]);
+        if ($this->_protocal != 'udp' && isset($this->_connections[$connection])) {
+            $this->_eventBase->remove($this->_connections[$connection], EV_READ);
+            $this->_eventBase->remove($this->_connections[$connection], EV_WRITE);
+            fclose($this->_connections[$connection]);
         }
 
-        unset($this->_connections[$fd], $this->_bufferRecv[$fd], $this->_bufferSend[$fd]);
+        unset($this->_connections[$connection], $this->_bufferRecv[$connection], $this->_bufferSend[$connection]);
 
         return true;
     }
 }
 
+/**
+ * Class Buffer
+ *
+ * @package NHK\Server
+ */
 class Buffer {
+    /**
+     * @var int
+     */
     public $remainLength = 0;
+    /**
+     * @var int
+     */
     public $length = 0;
+    /**
+     * @var string
+     */
     public $content = '';
-    public $isInit = false;
+    /**
+     * @var int
+     */
+    public $prereadLength = 4;
+    /**
+     *
+     */
     const MAX_LENGTH = 100000000;
-    const PREREAD_LENGTH = 4;
 
-    public function __construct() {
-        $this->isInit = true;
+    /**
+     * @param $initLength
+     */
+    public function __construct($initLength) {
+        $this->remainLength = $this->prereadLength = $initLength;
     }
 
+    /**
+     * @param $stream
+     * @param $remain
+     */
     public function receive($stream, $remain) {
         $this->content .= $stream;
         $this->length += strlen($stream);
         $this->remainLength = (int)$remain;
     }
 
+    /**
+     * @return int
+     */
     public function getRemainLength() {
-        if ($this->isInit) {
-            return self::PREREAD_LENGTH;
-        }
-
         return $this->remainLength;
     }
 
+    /**
+     *
+     */
     public function reset() {
         $this->content = '';
         $this->length = 0;
-        $this->remainLength = self::PREREAD_LENGTH;
+        $this->remainLength = $this->prereadLength;
     }
 
+    /**
+     * @return bool
+     */
     public function isDone() {
         return $this->remainLength === 0;
     }
 
+    /**
+     * @return bool
+     */
     public function isEmpty() {
         return empty($this->content);
+    }
+}
+
+/**
+ * Class WorkerStatus
+ *
+ * @package NHK\Server
+ */
+class WorkerStatus {
+    /**
+     * @var array
+     */
+    public $status = array();
+
+    /**
+     * @throws Exception
+     */
+    public function save() {
+        $queue = Env::getInstance()->getMsgQueue();
+        $errCode = null;
+        if(!msg_send($queue, Env::MSG_TYPE_STATUS, $this->status, true, false, $errCode)) {
+            throw new Exception('send worker status to queue failed, try again');
+        }
+    }
+
+    /**
+     * @param $name
+     * @param $value
+     * @return mixed
+     */
+    public function __set($name, $value) {
+        return $this->status[$name] = $value;
+    }
+
+    /**
+     * @param $name
+     * @return null
+     */
+    public function __get($name) {
+        if (array_key_exists($name, $this->status)) {
+            return $this->status[$name];
+        }
+
+        return null;
+    }
+
+    /**
+     * @param $name
+     * @return bool
+     */
+    public function __isset($name) {
+        return array_key_exists($name, $this->status);
+    }
+
+    /**
+     * @param     $name
+     * @param int $count
+     * @return $this
+     */
+    public function incre($name, $count = 1) {
+        if (array_key_exists($name, $this->status)) {
+            $this->status[$name] += $count;
+        }
+        else {
+            $this->status[$name] = $count;
+        }
+
+        return $this;
     }
 }
