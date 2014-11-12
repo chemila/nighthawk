@@ -44,8 +44,10 @@ class Event {
      * @return bool
      */
     public function add($name, $fd, $flag, $func, $args = array()) {
-        Core::alert('event add:'.$name, false);
+        Core::alert('add event: ' . $name, false);
         if (!$this->_checkEventFlag($flag)) {
+            Core::alert('invalid evnet flag');
+
             return false;
         }
 
@@ -55,9 +57,7 @@ class Event {
             return false;
         }
 
-        $key = sprintf('%s:%s', $name, self::$_enentMap[$flag]);;
-        $flag = $flag | EV_PERSIST;
-
+        $key = $this->_genEventName($name, $flag);
         if (array_key_exists($key, $this->_entities)) {
             Core::alert(sprintf('event[%s] alread exist', $key));
 
@@ -66,7 +66,7 @@ class Event {
 
         $this->_entities[$key] = $event = event_new();
 
-        if (!event_set($event, $fd, $flag, $func, $args)) {
+        if (!event_set($event, $fd, $flag | EV_PERSIST, $func, $args)) {
             Core::alert('event: set event failed, name: ' . $name);
 
             return false;
@@ -94,15 +94,26 @@ class Event {
      */
     public function remove($name, $flag) {
         if (!$this->_checkEventFlag($flag)) {
+            Core::alert('invalid event flag: ' . $flag);
+
             return false;
         }
 
-        if (event_del($name)) {
-            unset($this->_entities[$name]);
-            return true;
+        $key = $this->_genEventName($name, $flag);
+        if (!isset($this->_entities[$key])) {
+            return false;
         }
 
-        return false;
+        if (event_del($this->_entities[$key])) {
+            unset($this->_entities[$key]);
+
+            return true;
+        }
+        else {
+            Core::alert('event del failed');
+
+            return false;
+        }
     }
 
     /**
@@ -124,5 +135,20 @@ class Event {
         }
 
         return true;
+    }
+
+    /**
+     * @param $name
+     * @param $flag
+     * @return string
+     */
+    private function _genEventName($name, $flag) {
+        $key = sprintf('%s:%s', $name, self::$_enentMap[$flag]);;
+
+        return $key;
+    }
+
+    public function display() {
+        return $this->_entities;
     }
 }

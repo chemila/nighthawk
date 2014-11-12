@@ -70,6 +70,7 @@ class Config {
     public function get($uri, $default = null) {
         $node = self::$config;
         $paths = explode('.', $uri);
+
         while (!empty($paths)) {
             $path = array_shift($paths);
             if (!isset($node[$path])) {

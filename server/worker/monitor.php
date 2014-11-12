@@ -34,11 +34,11 @@ class Monitor extends Worker {
     }
 
     /**
-     * @param $buff
+     * @param $package
      * @return mixed
      */
-    public function dealBussiness($buff) {
+    public function dealBussiness($package) {
         // TODO: Implement dealBussiness() method.
-        Core::alert('deal bussiness on: ' . $buff, false);
+        Core::alert('deal bussiness on: ' . $package, false);
     }
 }
