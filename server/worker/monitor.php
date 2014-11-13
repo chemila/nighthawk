@@ -44,7 +44,7 @@ class Monitor extends Worker {
 
         switch ($content) {
             case 'status':
-                $this->_status->display();
+                $this->sendToClient($this->_status->display() . "\n");
                 break;
         }
     }
