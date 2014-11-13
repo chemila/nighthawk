@@ -1,8 +1,6 @@
 <?php
-
-
 namespace NHK\system;
-
+defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 /**
  * Class Event

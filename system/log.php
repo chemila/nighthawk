@@ -9,9 +9,11 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 class Log {
     /**
-     * @param $msg
+     * @param string $msg
+     * @param array  $data
+     * @return int
      */
-    public static function write($msg) {
+    public static function write($msg, $data = array()) {
         $dir = Env::getInstance()->getLogDir() . DIRECTORY_SEPARATOR . date('Y-m-d');
         umask(0);
 
@@ -20,6 +22,12 @@ class Log {
         }
 
         $file = $dir . "/server.log";
-        file_put_contents($file, date('Y-m-d H:i:s') . " " . $msg . "\n", FILE_APPEND);
+        if (is_array($data)) {
+            $data = json_encode($data);
+        }
+
+        $content = sprintf("%s %s %s\n", date('Y-m-d H:i:s'), $msg, $data);
+
+        return file_put_contents($file, $content, FILE_APPEND);
     }
 }

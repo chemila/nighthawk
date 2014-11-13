@@ -1,5 +1,6 @@
 <?php
 namespace NHK\Server\Worker;
+defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 use NHK\Server\Worker;
 use NHK\System\Core;
@@ -39,6 +40,12 @@ class Monitor extends Worker {
      */
     public function dealBussiness($package) {
         // TODO: Implement dealBussiness() method.
-        Core::alert('deal bussiness on: ' . $package, false);
+        $content = trim($package);
+
+        switch ($content) {
+            case 'status':
+                $this->_status->display();
+                break;
+        }
     }
 }

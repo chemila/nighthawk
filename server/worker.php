@@ -6,6 +6,7 @@ use NHK\System\Core;
 use NHK\System\Env;
 use NHK\system\Event;
 use NHK\System\Exception;
+use NHK\System\Log;
 
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
@@ -16,6 +17,9 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 abstract class Worker {
     const EVENT_SIGNAL_PREFIX = 'SIG_';
+    const EVENT_SOCKET_TCP = self::SOCKET_PROTOCAL_TCP;
+    const SOCKET_PROTOCAL_TCP = 'tcp';
+    const EVENT_SOCKET_UDP = 'udp';
     /**
      *
      */
@@ -42,7 +46,10 @@ abstract class Worker {
      *
      */
     const STATE_SHUTDOWN = 4;
-
+    /**
+     * @var int
+     */
+    protected static $count = 1;
     /**
      * @var
      */
@@ -82,15 +89,11 @@ abstract class Worker {
     /**
      * @var
      */
-    protected $_currentConn;
+    protected $_currentConnection;
     /**
      * @var WorkerStatus
      */
     protected $_status;
-    /**
-     * @var int
-     */
-    protected static $count = 1;
     /**
      * @var
      */
@@ -128,25 +131,12 @@ abstract class Worker {
         $this->installSignal();
         $this->installEvent();
 
-        $this->beforeRun();
+        $this->onStart();
         $this->run();
-        $this->afterRun();
 
         Core::alert('start event loop', false);
         $this->_eventBase->loop();
         Core::alert('exit loop unexpect', true);
-    }
-
-    /**
-     * @return mixed
-     */
-    abstract public function run();
-
-    /**
-     *
-     */
-    protected function beforeRun() {
-
     }
 
     /**
@@ -163,11 +153,11 @@ abstract class Worker {
      *
      */
     public function installEvent() {
-        if ($this->_protocal == 'tcp') {
-            $this->_eventBase->add('tcp', $this->_socket, EV_READ, array($this, 'accept'));
+        if ($this->_protocal == self::SOCKET_PROTOCAL_TCP) {
+            $this->_eventBase->add(self::EVENT_SOCKET_TCP, $this->_socket, EV_READ, array($this, 'accept'));
         }
         else {
-            $this->_eventBase->add('udp', $this->_socket, EV_READ, array($this, 'recvUdp'));
+            $this->_eventBase->add(self::EVENT_SOCKET_UDP, $this->_socket, EV_READ, array($this, 'recvUdp'));
         }
 
         $this->_eventBase->add(
@@ -177,6 +167,18 @@ abstract class Worker {
             self::EVENT_SIGNAL_PREFIX . SIGUSR2, SIGUSR2, EV_SIGNAL, array($this, 'signalHandler'), array(SIGUSR2)
         );
     }
+
+    /**
+     *
+     */
+    protected function onStart() {
+
+    }
+
+    /**
+     * @return mixed
+     */
+    abstract public function run();
 
     /**
      * @return bool
@@ -191,7 +193,9 @@ abstract class Worker {
 
         $current = intval($conn);
         stream_set_blocking($conn, 0);
-        $this->_connections[$current] = $conn;
+        $this->_connections[$current] = $this->_currentConnection = $conn;
+        $this->onAccept();
+
         if (!$this->_isPersist) {
             $preLength = self::PACKAGE_MAX_LENGTH;
         }
@@ -201,7 +205,7 @@ abstract class Worker {
 
         $this->_bufferRecv[$current] = new Buffer($preLength);
         Core::alert('accept address:' . $address, false);
-        $this->_status->incre('acceptCount');
+        $this->_status->incre('accepted');
 
         if (!$this->_eventBase->add(
             self::EVENT_NAME_PREFIX . $current, $conn, EV_READ, array($this, 'processTcpInput'),
@@ -214,13 +218,16 @@ abstract class Worker {
         return true;
     }
 
+    public function onAccept() {
+
+    }
+
     /**
      * @param $connection
      * @param $events
      * @param $args
      */
     public function processTcpInput($connection, $events, $args) {
-        Core::alert('process on: ' . $args[0], false);
         $this->_status->incre('processRequest');
 
         if ($this->_runState == self::STATE_SHUTDOWN) {
@@ -234,14 +241,15 @@ abstract class Worker {
         /** @var Buffer $receiveBuffer */
         $receiveBuffer = $this->_bufferRecv[$current];
         $content = stream_socket_recvfrom($connection, $receiveBuffer->getRemainLength());
-        $receiveBuffer->content .= $content;
-        if ('' === $content || '' === fread($connection, $receiveBuffer->getRemainLength())) {
+        if ('' == $content) {
             if (!feof($connection)) {
                 //NOTE: not closed by client yet, try again
+                Core::alert('connection is open, try again', false);
+
                 return false;
             }
 
-            $this->_status->incre('clientCloseCnt');
+            $this->_status->incre('clientClosed');
 
             if (!$receiveBuffer->isEmpty()) {
                 Core::alert('no data received, and closed by client');
@@ -251,8 +259,8 @@ abstract class Worker {
             $this->closeConnection($current);
         }
         else {
+            Core::alert('receive message: ' . substr(trim($content), 0, 10), false);
             $result = $this->parseInput($content);
-            Core::alert('parse input result:' . $result, false);
 
             if (false === $result || $result < 0) {
                 Core::alert('parse input failed');
@@ -267,9 +275,10 @@ abstract class Worker {
                 Core::alert('receive buffer done', false);
                 try {
                     $this->dealBussiness($receiveBuffer->content);
+                    $this->_status->incre('bussinessDone');
                 }
                 catch (\Exception $e) {
-                    $this->_status->incre('businessException');
+                    $this->_status->incre('bussinessException');
                 }
 
                 if ($this->_isPersist) {
@@ -295,6 +304,49 @@ abstract class Worker {
     }
 
     /**
+     *
+     */
+    public function stop() {
+        $this->onStop();
+
+        if ($this->_runState != self::STATE_SHUTDOWN) {
+            $this->_eventBase->remove(self::EVENT_SOCKET_TCP, $this->_socket, EV_READ);
+            fclose($this->_socket);
+            $this->_runState = self::STATE_SHUTDOWN;
+        }
+
+        if ($this->allTaskHasDone()) {
+            exit(0);
+        }
+    }
+
+    public function onStop() {
+
+    }
+
+    public function allTaskHasDone() {
+        return true;
+    }
+
+    /**
+     * @param $connection
+     * @return bool
+     */
+    protected function closeConnection($connection) {
+        $connection = intval($connection);
+
+        if ($this->_protocal != self::EVENT_SOCKET_UDP && isset($this->_connections[$connection])) {
+            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_READ);
+            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_WRITE);
+            fclose($this->_connections[$connection]);
+        }
+
+        unset($this->_connections[$connection], $this->_bufferRecv[$connection], $this->_bufferSend[$connection]);
+
+        return true;
+    }
+
+    /**
      * @param string $buff
      * @return int|false
      */
@@ -313,17 +365,10 @@ abstract class Worker {
         $address = null;
         $buff = stream_socket_recvfrom($this->_socket, 65536, 0, $address);
         if (false === $buff || empty($address)) {
-
             return false;
         }
 
-    }
-
-    /**
-     *
-     */
-    protected function afterRun() {
-
+        return true;
     }
 
     /**
@@ -356,8 +401,9 @@ abstract class Worker {
     /**
      *
      */
-    public function stop() {
-
+    protected function syncStatus() {
+        Core::alert('sync worker status', false);
+        $this->_status->enQueue();
     }
 
     /**
@@ -374,13 +420,8 @@ abstract class Worker {
 
     }
 
-    /**
-     *
-     */
-    protected function syncStatus() {
-        Core::alert('sync worker status', false);
-        var_dump($this->_status->data);
-        $this->_status->pushQueue();
+    public function sendToClient($address, $content) {
+
     }
 
     /**
@@ -390,31 +431,6 @@ abstract class Worker {
         $errorCode = 0;
         $requiredFiles = array_flip(get_included_files());
     }
-
-    /**
-     *
-     */
-    public function test() {
-        fwrite($this->_socket, 'hello');
-    }
-
-    /**
-     * @param $connection
-     * @return bool
-     */
-    protected function closeConnection($connection) {
-        $connection = intval($connection);
-
-        if ($this->_protocal != 'udp' && isset($this->_connections[$connection])) {
-            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_READ);
-            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_WRITE);
-            fclose($this->_connections[$connection]);
-        }
-
-        unset($this->_connections[$connection], $this->_bufferRecv[$connection], $this->_bufferSend[$connection]);
-
-        return true;
-    }
 }
 
 /**
@@ -423,6 +439,10 @@ abstract class Worker {
  * @package NHK\Server
  */
 class Buffer {
+    /**
+     *
+     */
+    const MAX_LENGTH = 100000000;
     /**
      * @var int
      */
@@ -439,10 +459,6 @@ class Buffer {
      * @var int
      */
     public $prereadLength = 4;
-    /**
-     *
-     */
-    const MAX_LENGTH = 100000000;
 
     /**
      * @param $initLength
@@ -506,7 +522,7 @@ class WorkerStatus {
     /**
      * @throws Exception
      */
-    public function pushQueue() {
+    public function enQueue() {
         $queue = Env::getInstance()->getMsgQueue();
         $errCode = null;
         if (!msg_send($queue, Env::MSG_TYPE_STATUS, $this->data, true, false, $errCode)) {
@@ -521,17 +537,9 @@ class WorkerStatus {
         $queue = Env::getInstance()->getMsgQueue();
         $msgType = $data = null;
         msg_receive($queue, Env::MSG_TYPE_STATUS, $msgType, 65535, $data, true);
+        var_dump($data);
 
         return $data;
-    }
-
-    /**
-     * @param $name
-     * @param $value
-     * @return mixed
-     */
-    public function __set($name, $value) {
-        return $this->data[$name] = $value;
     }
 
     /**
@@ -544,6 +552,15 @@ class WorkerStatus {
         }
 
         return null;
+    }
+
+    /**
+     * @param $name
+     * @param $value
+     * @return mixed
+     */
+    public function __set($name, $value) {
+        return $this->data[$name] = $value;
     }
 
     /**
@@ -574,6 +591,6 @@ class WorkerStatus {
      * @return array
      */
     public function display() {
-        return $this->data;
+        var_dump($this->data);
     }
 }
