@@ -146,6 +146,7 @@ class Core {
             // Create a text version of the exception
             $error = Core::displayException($e);
             self::alert($error);
+            self::alert($e->getTraceAsString());
             Log::write($error);
 
             return true;

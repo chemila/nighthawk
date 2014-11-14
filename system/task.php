@@ -2,6 +2,7 @@
 namespace NHK\system;
 
 defined('NHK_PATH_ROOT') or die('No direct script access.');
+
 /**
  * Class Task
  *
@@ -11,40 +12,39 @@ class Task {
     /**
      * @var array
      */
-    private $_tasks = array();
-    /**
-     * @var $this
-     */
-    public static $_instance;
+    private static $_tasks = array();
 
     /**
-     * @desc init
+     * @desc init for signal handler
      */
-    private function __construct() {
+    public static function init() {
         pcntl_alarm(1);
-        pcntl_signal(SIGALRM, array($this, 'signalHandle'), false);
+        pcntl_signal(SIGALRM, array(__CLASS__, 'signalHandle'), false);
     }
 
     /**
-     * @return Task
+     * @param $name
+     * @param \NHK\System\Event $eventBase
+     * @return bool
      */
-    public static function getInstance() {
-        if (!self::$_instance) {
-            return self::$_instance = new self();
+    public static function initEvent($name, $eventBase) {
+        pcntl_alarm(1);
+        if (is_resource($eventBase)) {
+            return $eventBase->add($name . SIGALRM, SIGALRM, EV_SIGNAL, array(__CLASS__, 'signalHandle'));
         }
 
-        return self::$_instance;
+        return false;
     }
 
     /**
      * @desc handle signal alarm
      */
-    public function signalHandle() {
-        if (!empty($this->_tasks)) {
+    public static function signalHandle() {
+        if (!empty(self::$_tasks)) {
             /** @var TaskEntity $entity */
-            foreach ($this->_tasks as $entity) {
+            foreach (self::$_tasks as $entity) {
                 if ($entity->isReady()) {
-                    $entity->doIt(array());
+                    $entity->doIt();
                 }
             }
         }
@@ -60,10 +60,10 @@ class Task {
      * @param bool $persist
      * @return $this
      */
-    public function add($name, $interval, $callback, $startTime = null, $persist = true) {
-        $taskEntity = new TaskEntity($name, $interval, $callback, $startTime, $persist);
-        if (!array_key_exists($name, $this->_tasks)) {
-            $this->_tasks[$name] = $taskEntity;
+    public static function add($name, $interval, $callback, $startTime = null, $persist = true, $args = array()) {
+        $taskEntity = new TaskEntity($name, $interval, $callback, $startTime, $persist, $args);
+        if (!array_key_exists($name, self::$_tasks)) {
+            self::$_tasks[$name] = $taskEntity;
 
             return true;
         }
@@ -74,9 +74,16 @@ class Task {
     /**
      * @desc reset
      */
-    public function clear() {
+    public static function clear() {
         pcntl_alarm(1);
-        $this->_tasks = array();
+        self::$_tasks = array();
+    }
+
+    /**
+     * @return array
+     */
+    public static function display() {
+        return array_keys(self::$_tasks);
     }
 }
 
@@ -103,6 +110,10 @@ class TaskEntity {
      */
     public $callback;
     /**
+     * @var array
+     */
+    public $callbackArgs = array();
+    /**
      * @var int
      */
     public $interval;
@@ -113,9 +124,10 @@ class TaskEntity {
      * @param callback $callback
      * @param null|int $startTime
      * @param bool     $persist
+     * @param array    $args
      * @throws Exception
      */
-    public function __construct($name, $interval, $callback, $startTime = null, $persist = true) {
+    public function __construct($name, $interval, $callback, $startTime = null, $persist = true, $args = array()) {
         if (!$startTime) {
             $startTime = time();
         }
@@ -129,6 +141,7 @@ class TaskEntity {
         }
 
         $this->callback = $callback;
+        $this->callbackArgs = $args;
         $this->persist = (bool)$persist;
     }
 
@@ -140,15 +153,18 @@ class TaskEntity {
     }
 
     /**
-     * @param $args
+     * @desc call task callback
      */
-    public function doIt($args) {
-        call_user_func_array($this->callback, $args);
+    public function doIt() {
+        call_user_func_array($this->callback, $this->callbackArgs);
         if (true === $this->persist) {
             $this->runTime = time() + $this->interval;
         }
     }
 
+    /**
+     * @return string
+     */
     public function display() {
         return sprintf(
             "name: %s, runTime: %s, interval: %d", $this->name, date('Y-m-d H:i:s', $this->runTime),

@@ -60,7 +60,7 @@ class Process {
     /**
      * @return bool
      */
-    public static function kill() {
+    public static function killMaster() {
         $pid = self::checkProcess();
         if ($pid <= 0) {
             return false;
@@ -71,6 +71,24 @@ class Process {
         }
 
         return unlink(Env::getInstance()->getPIDFile());
+    }
+
+    /**
+     * @param int|array $pids
+     */
+    public static function forceKill($pids) {
+        if (!is_array($pids)) {
+            $pids = array($pids);
+        }
+
+        foreach ($pids as $pid) {
+            if (!posix_kill($pid, 0)) {
+                continue;
+            }
+
+            Log::write('force to kill pid: ' . $pid);
+            posix_kill($pid, SIGKILL);
+        }
     }
 
     /**
@@ -106,7 +124,7 @@ class Process {
             clearstatcache();
             usleep(1000);
             if (time() - $startTime >= $waitTime) {
-                self::kill();
+                self::killMaster();
                 usleep(500000);
                 break;
             }
@@ -160,11 +178,13 @@ class Process {
     public static function setProcessTitle($title) {
         if (extension_loaded('proctitle') && function_exists('setproctitle')) {
             @setproctitle($title);
+
             return true;
         }
 
         if (function_exists('cli_set_process_title')) {
             @cli_set_process_title($title);
+
             return true;
         }
 

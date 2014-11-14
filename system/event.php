@@ -13,6 +13,10 @@ class Event {
      */
     private $_base;
     /**
+     * @var string
+     */
+    private $_name;
+    /**
      * @var array
      */
     private $_entities = array();
@@ -26,23 +30,21 @@ class Event {
             EV_SIGNAL => 'onReceiveSignal',
         );
 
-    /**
-     *
-     */
-    public function __construct() {
+    public function __construct($name) {
+        $this->_name = $name;
         $this->_base = event_base_new();
     }
 
     /**
-     * @param       $name
-     * @param       $fd
-     * @param       $flag
-     * @param       $func
-     * @param array $args
+     * @param int          $flag
+     * @param resource|int $fd
+     * @param callback     $func
+     * @param array        $args
+     * @internal param string $name
      * @return bool
      */
-    public function add($name, $fd, $flag, $func, $args = array()) {
-        Core::alert('add event: ' . $name, false);
+    public function add($flag, $fd, $func, $args = array()) {
+        Core::alert('add event: ' . $this->_name, false);
         if (!$this->_checkEventFlag($flag)) {
             Core::alert('invalid evnet flag');
 
@@ -55,17 +57,11 @@ class Event {
             return false;
         }
 
-        $key = $this->_genEventName($name, $flag);
-        if (array_key_exists($key, $this->_entities)) {
-            Core::alert(sprintf('event[%s] alread exist', $key));
-
-            return false;
-        }
-
+        $key = $this->_genEventName($flag);
         $this->_entities[$key] = $event = event_new();
 
         if (!event_set($event, $fd, $flag | EV_PERSIST, $func, $args)) {
-            Core::alert('event: set event failed, name: ' . $name);
+            Core::alert('event: set event failed, name: ' . $this->_name);
 
             return false;
         }
@@ -86,18 +82,17 @@ class Event {
     }
 
     /**
-     * @param $name
-     * @param $flag
+     * @param int    $flag
      * @return bool
      */
-    public function remove($name, $flag) {
+    public function remove($flag) {
         if (!$this->_checkEventFlag($flag)) {
             Core::alert('invalid event flag: ' . $flag);
 
             return false;
         }
 
-        $key = $this->_genEventName($name, $flag);
+        $key = $this->_genEventName($flag);
         if (!isset($this->_entities[$key])) {
             return false;
         }
@@ -115,14 +110,14 @@ class Event {
     }
 
     /**
-     *
+     * @desc base loop
      */
     public function loop() {
         event_base_loop($this->_base);
     }
 
     /**
-     * @param $flag
+     * @param int $flag
      * @return bool
      */
     private function _checkEventFlag($flag) {
@@ -136,17 +131,20 @@ class Event {
     }
 
     /**
-     * @param $name
-     * @param $flag
+     * @param int $flag
+     * @internal param string $name
      * @return string
      */
-    private function _genEventName($name, $flag) {
-        $key = sprintf('%s:%s', $name, self::$_enentMap[$flag]);;
+    private function _genEventName($flag) {
+        $key = sprintf('%s:%s', $this->_name, self::$_enentMap[$flag]);;
 
         return $key;
     }
 
+    /**
+     * @return array
+     */
     public function display() {
-        return $this->_entities;
+        return array_keys($this->_entities);
     }
 }

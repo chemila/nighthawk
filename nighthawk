@@ -40,7 +40,7 @@ switch ($cmd) {
         NHK\System\Process::reload();
         break;
     case 'kill':
-        NHK\System\Process::kill();
+        NHK\System\Process::killMaster();
         break;
     case 'status':
         NHK\System\Process::status();

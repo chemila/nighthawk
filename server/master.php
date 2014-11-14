@@ -6,6 +6,7 @@ use NHK\System\Core;
 use NHK\System\Env;
 use NHK\System\Log;
 use NHK\System\Process;
+use NHK\system\Task;
 
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
@@ -16,7 +17,11 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 class Master {
     const MAX_CHILDREN = 10;
-
+    const STATE_START = 1;
+    const STATE_SHUTDOWN = 2;
+    const STATE_RUNNING = 4;
+    const STATE_RELOAD = 8;
+    const KILL_WAIT = 5;
     /**
      * @desc errors
      */
@@ -35,11 +40,8 @@ class Master {
     /**
      * @var array
      */
-    private static $_workers
-        = array(
-            'ctime' => 0,
-            'workers' => array(),
-        );
+    private static $_workers = array();
+
     /**
      * @var array
      */
@@ -83,6 +85,10 @@ class Master {
      * @var string
      */
     private $_pidFile;
+    /**
+     * @var int
+     */
+    private $_runningState = self::STATE_START;
 
     /**
      * @desc init env
@@ -104,6 +110,7 @@ class Master {
         $this->_savePid();
         $this->_installSignal();
         $this->_spawnWorkers();
+        Task::init();
         $this->_loop();
     }
 
@@ -162,6 +169,7 @@ class Master {
      * @desc loop signal
      */
     private function _loop() {
+        $this->_runningState = self::STATE_RUNNING;
         for (; ;) {
             sleep(1);
             pcntl_signal_dispatch();
@@ -186,6 +194,7 @@ class Master {
 
     /**
      * TODO: setup all signal handlers
+     *
      * @param $signo
      * @return bool
      */
@@ -201,7 +210,8 @@ class Master {
             case SIGHUP:
                 Log::write('SIGHUP received');
                 break;
-            case SIGQUIT:
+            case SIGINT:
+                $this->stop();
                 break;
             default:
                 break;
@@ -265,7 +275,12 @@ class Master {
         }
 
         if ($pid > 0) {
-            self::$_workers[$name][$pid] = $pid;
+            if (isset(self::$_workers[$name])) {
+                array_push(self::$_workers[$name], $pid);
+            }
+            else {
+                self::$_workers[$name] = array($pid);
+            }
 
             return $pid;
         }
@@ -294,5 +309,54 @@ class Master {
         $worker->start();
 
         return false;
+    }
+
+    /**
+     * @desc catch signal SIGINT to stop workers and master
+     */
+    public function stop() {
+        if (empty(self::$_workers)) {
+            Core::alert('no worker running, exit now!', false);
+            exit(0);
+        }
+
+        $this->_runningState = self::STATE_SHUTDOWN;
+
+        foreach (self::$_workers as $workerName => $pids) {
+            $this->killWorker($workerName);
+        }
+
+        Core::alert('master exit now');
+        exit(0);
+    }
+
+    /**
+     * @param $name
+     * @return bool
+     */
+    public function killWorker($name) {
+        if (!array_key_exists($name, self::$_workers)) {
+            Core::alert('worker not exist: ' . $name);
+
+            return false;
+        }
+
+        $workerPids = self::$_workers[$name];
+        foreach ($workerPids as $pid) {
+            posix_kill($pid, SIGINT);
+        }
+
+        Task::add(
+            'kill_worker_' . $name,
+            self::KILL_WAIT,
+            array('NHK\\System\\Process', 'forceKill'), null, false,
+            array($workerPids)
+        );
+
+        return true;
+    }
+
+    public function test() {
+        Core::alert('test', false);
     }
 }

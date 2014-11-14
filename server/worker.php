@@ -7,6 +7,7 @@ use NHK\System\Env;
 use NHK\system\Event;
 use NHK\System\Exception;
 use NHK\System\Log;
+use NHK\system\Task;
 
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
@@ -21,7 +22,7 @@ abstract class Worker {
     const SOCKET_PROTOCAL_TCP = 'tcp';
     const EVENT_SOCKET_UDP = 'udp';
     /**
-     * @desc package pre-read length
+     * @desc package preread length
      */
     const PREREAD_BUFFER_LENGTH = 4;
     /**
@@ -36,7 +37,6 @@ abstract class Worker {
      * @desc buffer size
      */
     const MAX_SEND_BUFF_SIZE = 2024000;
-    const EVENT_NAME_PREFIX = 'conn_';
     const EXIT_WAIT_TIME = 10;
     /**
      * @desc on running state
@@ -47,11 +47,7 @@ abstract class Worker {
      */
     const STATE_SHUTDOWN = 4;
     /**
-     * @var int
-     */
-    protected static $count = 1;
-    /**
-     * @var
+     * @var string the worker name
      */
     protected $_name;
     /**
@@ -62,10 +58,6 @@ abstract class Worker {
      * @var bool|string
      */
     protected $_isPersist = false;
-    /**
-     * @var array
-     */
-    protected $_signalHandle = array();
     /**
      * @var Event
      */
@@ -98,7 +90,7 @@ abstract class Worker {
      */
     protected $_bufferRecv = array();
     /**
-     * @var
+     * @var resource current TCP connection
      */
     protected $_currentConnection;
     /**
@@ -106,7 +98,7 @@ abstract class Worker {
      */
     protected $_currentClient;
     /**
-     * @var WorkerStatus
+     * @var int WorkerStatus
      */
     protected $_status;
     /**
@@ -121,16 +113,14 @@ abstract class Worker {
      */
     function __construct($name, $socket) {
         $this->_name = $name;
-
         if (!is_resource($socket) || !($socketStat = socket_get_status($socket))) {
             throw new Exception('invalid socket');
         }
-
-        $this->_socket = $socket;
         socket_set_blocking($socket, 0);
+        $this->_socket = $socket;
         $this->_protocal = substr($socketStat['stream_type'], 0, 3);
         $this->_isPersist = Config::getInstance()->get($name . '.persistent_connection', false);
-        $this->_eventBase = new Event();
+        $this->_eventBase = new Event($this->_name);
         $this->_status = new WorkerStatus();
     }
 
@@ -141,13 +131,13 @@ abstract class Worker {
         $this->_status->startTime = time();
         $this->installSignal();
         $this->installEvent();
-
+        Task::initEvent($this->_name, $this->_eventBase);
         $this->onStart();
         $this->run();
 
         Core::alert('start event loop', false);
         $this->_eventBase->loop();
-        Core::alert('exit loop unexpect', true);
+        Core::alert('exit loop unexpected', true);
     }
 
     /**
@@ -165,10 +155,10 @@ abstract class Worker {
      */
     public function installEvent() {
         if ($this->_protocal == self::SOCKET_PROTOCAL_TCP) {
-            $this->_eventBase->add(self::EVENT_SOCKET_TCP, $this->_socket, EV_READ, array($this, 'accept'));
+            $this->_eventBase->add(EV_READ, $this->_socket, array($this, 'accept'));
         }
         else {
-            $this->_eventBase->add(self::EVENT_SOCKET_UDP, $this->_socket, EV_READ, array($this, 'recvUdp'));
+            $this->_eventBase->add(EV_READ, $this->_socket, array($this, 'recvUdp'));
         }
 
         $this->_addSignalEvent();
@@ -180,7 +170,7 @@ abstract class Worker {
     protected function _addSignalEvent() {
         foreach (self::$_signalEvents as $signo) {
             $res = $this->_eventBase->add(
-                self::EVENT_NAME_PREFIX . $signo, $signo, EV_SIGNAL, array($this, 'signalHandler'), array($signo)
+                EV_SIGNAL, $signo, array($this, 'signalHandler'), array($signo)
             );
 
             if (!$res) {
@@ -227,11 +217,7 @@ abstract class Worker {
         Core::alert('accept address:' . $address, false);
         $this->_status->incre('accepted');
 
-        if (!$this->_eventBase->add(
-            self::EVENT_NAME_PREFIX . $current, $conn, EV_READ, array($this, 'processTcpInput'),
-            array($address)
-        )
-        ) {
+        if (!$this->_eventBase->add(EV_READ, $conn, array($this, 'processTcpInput'), array($address))) {
             throw new Exception('event add failed');
         }
 
@@ -337,7 +323,7 @@ abstract class Worker {
         $this->onStop();
 
         if ($this->_runState != self::STATE_SHUTDOWN) {
-            $this->_eventBase->remove(self::EVENT_SOCKET_TCP, $this->_socket, EV_READ);
+            $this->_eventBase->remove(self::EVENT_SOCKET_TCP, EV_READ);
             fclose($this->_socket);
             $this->_runState = self::STATE_SHUTDOWN;
         }
@@ -345,6 +331,10 @@ abstract class Worker {
         if ($this->checkConnection()) {
             exit(0);
         }
+    }
+
+    public function test() {
+        Core::alert('this is a test on worker');
     }
 
     /**
@@ -386,8 +376,8 @@ abstract class Worker {
         $connection = intval($connection);
 
         if ($this->_protocal != self::EVENT_SOCKET_UDP && isset($this->_connections[$connection])) {
-            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_READ);
-            $this->_eventBase->remove(self::EVENT_NAME_PREFIX . $connection, EV_WRITE);
+            $this->_eventBase->remove($this->_name . $connection, EV_READ);
+            $this->_eventBase->remove($this->_name . $connection, EV_WRITE);
             fclose($this->_connections[$connection]);
         }
 
@@ -403,8 +393,8 @@ abstract class Worker {
     abstract public function parseInput($buff);
 
     /**
-     * @param $package
-     * @return mixed
+     * @param string $package
+     * @return bool
      */
     abstract public function dealBussiness($package);
 
@@ -432,26 +422,18 @@ abstract class Worker {
 
     /**
      * @param $null
-     * @param $null
+     * @param $nullr
      * @param $args
      */
-    public function signalHandler($null, $null, $args) {
+    public function signalHandler($null, $nullr, $args) {
         $signo = $args[0];
-        Core::alert('catch signal: ' . $signo, false);
         switch ($signo) {
-            case SIGALRM:
-                if ($this->_runState == self::STATE_SHUTDOWN) {
-                    exit(0);
-                }
-                break;
             case SIGINT:
                 $this->stop();
-                pcntl_alarm(self::EXIT_WAIT_TIME);
                 break;
             case SIGHUP:
                 $this->reload();
                 $this->stop();
-                pcntl_alarm(self::EXIT_WAIT_TIME);
                 break;
             case SIGUSR1:
                 $this->syncStatus();
@@ -465,7 +447,7 @@ abstract class Worker {
     }
 
     /**
-     *
+     * @desc put worker status in msg-queue
      */
     protected function syncStatus() {
         Core::alert('sync worker status', false);
@@ -486,7 +468,8 @@ abstract class Worker {
     }
 
     /**
-     * @param      $content
+     * @param  string $content
+     * @return bool
      */
     public function sendToClient($content) {
         if (self::SOCKET_PROTOCAL_TCP !== $this->_protocal) { // send UDP packages
@@ -510,13 +493,9 @@ abstract class Worker {
         $buffer = $this->_bufferSend[$current];
         $buffer->push($subContent); //TODO: limit output buffer max length
         $this->_bufferSend[$current] = $buffer;
+        $this->_eventBase->add(EV_WRITE, $this->_currentConnection, array($this, 'processTcpOutput'));
 
-        $this->_eventBase->add(
-            self::EVENT_NAME_PREFIX . $current,
-            $this->_currentConnection,
-            EV_WRITE,
-            array($this, 'processTcpOutput')
-        );
+        return true;
     }
 
     /**
@@ -574,6 +553,7 @@ abstract class Worker {
 
 /**
  * Class Buffer
+ * TODO: collect buffer as array
  *
  * @package NHK\Server
  */
