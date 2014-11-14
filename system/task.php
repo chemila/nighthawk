@@ -15,25 +15,17 @@ class Task {
     private static $_tasks = array();
 
     /**
-     * @desc init for signal handler
-     */
-    public static function init() {
-        pcntl_alarm(1);
-        pcntl_signal(SIGALRM, array(__CLASS__, 'signalHandle'), false);
-    }
-
-    /**
-     * @param $name
      * @param \NHK\System\Event $eventBase
      * @return bool
      */
-    public static function initEvent($name, $eventBase) {
+    public static function init($eventBase = null) {
         pcntl_alarm(1);
-        if (is_resource($eventBase)) {
-            return $eventBase->add($name . SIGALRM, SIGALRM, EV_SIGNAL, array(__CLASS__, 'signalHandle'));
+        if ($eventBase instanceof Event) {
+            return $eventBase->add(EV_SIGNAL, SIGALRM, array(__CLASS__, 'signalHandle'));
         }
-
-        return false;
+        else {
+            return pcntl_signal(SIGALRM, array(__CLASS__, 'signalHandle'), false);
+        }
     }
 
     /**

@@ -131,7 +131,7 @@ abstract class Worker {
         $this->_status->startTime = time();
         $this->installSignal();
         $this->installEvent();
-        Task::initEvent($this->_name, $this->_eventBase);
+        Task::init($this->_eventBase);
         $this->onStart();
         $this->run();
 
@@ -169,9 +169,7 @@ abstract class Worker {
      */
     protected function _addSignalEvent() {
         foreach (self::$_signalEvents as $signo) {
-            $res = $this->_eventBase->add(
-                EV_SIGNAL, $signo, array($this, 'signalHandler'), array($signo)
-            );
+            $res = $this->_eventBase->add(EV_SIGNAL, $signo, array($this, 'signalHandler'), array($signo));
 
             if (!$res) {
                 throw new Exception('add signal event failed, signal: ' . $signo);

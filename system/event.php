@@ -27,7 +27,7 @@ class Event {
         = array(
             EV_READ => 'onRead',
             EV_WRITE => 'onWrite',
-            EV_SIGNAL => 'onReceiveSignal',
+            EV_SIGNAL => 'onSignal',
         );
 
     public function __construct($name) {
@@ -44,9 +44,8 @@ class Event {
      * @return bool
      */
     public function add($flag, $fd, $func, $args = array()) {
-        Core::alert('add event: ' . $this->_name, false);
         if (!$this->_checkEventFlag($flag)) {
-            Core::alert('invalid evnet flag');
+            Core::alert('invalid event flag');
 
             return false;
         }
@@ -57,7 +56,8 @@ class Event {
             return false;
         }
 
-        $key = $this->_genEventName($flag);
+        $key = $this->_genEventName($flag, $fd);
+        Core::alert('add event: ' . $key, false);
         $this->_entities[$key] = $event = event_new();
 
         if (!event_set($event, $fd, $flag | EV_PERSIST, $func, $args)) {
@@ -82,17 +82,17 @@ class Event {
     }
 
     /**
-     * @param int    $flag
+     * @param int $flag
      * @return bool
      */
-    public function remove($flag) {
+    public function remove($flag, $fd) {
         if (!$this->_checkEventFlag($flag)) {
             Core::alert('invalid event flag: ' . $flag);
 
             return false;
         }
 
-        $key = $this->_genEventName($flag);
+        $key = $this->_genEventName($flag, $fd);
         if (!isset($this->_entities[$key])) {
             return false;
         }
@@ -122,8 +122,6 @@ class Event {
      */
     private function _checkEventFlag($flag) {
         if (!array_key_exists($flag, self::$_enentMap)) {
-            Core::alert('invalid event flag: ' . $flag);
-
             return false;
         }
 
@@ -131,12 +129,13 @@ class Event {
     }
 
     /**
-     * @param int $flag
+     * @param int          $flag
+     * @param int|resource $fd
      * @internal param string $name
      * @return string
      */
-    private function _genEventName($flag) {
-        $key = sprintf('%s:%s', $this->_name, self::$_enentMap[$flag]);;
+    private function _genEventName($flag, $fd) {
+        $key = sprintf('%s:%s:%s', $this->_name, (int)$fd, self::$_enentMap[$flag]);;
 
         return $key;
     }
