@@ -108,6 +108,7 @@ abstract class Worker {
      * @var
      */
     protected $_currentConnection;
+    protected $_currentClient;
     /**
      * @var WorkerStatus
      */
@@ -206,7 +207,7 @@ abstract class Worker {
 
         $current = intval($conn);
         stream_set_blocking($conn, 0);
-        $this->_connections[$current] = $this->_currentConnection = $conn;
+        $this->_connections[$current] = $conn;
         $this->onAccept();
 
         if (!$this->_isPersist) {
@@ -252,6 +253,7 @@ abstract class Worker {
         }
 
         $current = intval($connection);
+        $this->_currentConnection = $connection;
 
         /** @var Buffer $receiveBuffer */
         $receiveBuffer = $this->_bufferRecv[$current];
@@ -272,48 +274,49 @@ abstract class Worker {
 
             Core::alert('close connection now', false);
             $this->closeConnection($current);
+
+            return true;
         }
-        else {
-            Core::alert('receive message: ' . substr(trim($content), 0, 10), false);
-            $result = $this->parseInput($content);
 
-            if (false === $result || $result < 0) {
-                Core::alert('parse input failed');
+        Core::alert('receive message: ' . substr(trim($content), 0, 10), false);
+        $result = $this->parseInput($content);
 
-                return false;
+        if (false === $result || $result < 0) {
+            Core::alert('parse input failed');
+
+            return false;
+        }
+
+        $receiveBuffer->push($content, $result);
+        $this->_bufferRecv[$current] = $receiveBuffer;
+
+        if ($receiveBuffer->isDone()) {
+            Core::alert('receive buffer done', false);
+            try {
+                $this->dealBussiness($receiveBuffer->content);
+                $this->_status->incre('bussinessDone');
+            }
+            catch (\Exception $e) {
+                $this->_status->incre('bussinessException');
             }
 
-            $receiveBuffer->push($content, $result);
-            $this->_bufferRecv[$current] = $receiveBuffer;
+            if ($this->_isPersist) {
+                Core::alert('persist connection reset', false);
+                $receiveBuffer->reset();
+                $this->_bufferRecv[$current] = $receiveBuffer;
 
-            if ($receiveBuffer->isDone()) {
-                Core::alert('receive buffer done', false);
-                try {
-                    $this->dealBussiness($receiveBuffer->content);
-                    $this->_status->incre('bussinessDone');
-                }
-                catch (\Exception $e) {
-                    $this->_status->incre('bussinessException');
-                }
+                return true;
+            }
 
-                if ($this->_isPersist) {
-                    Core::alert('persist connection reset', false);
-                    $receiveBuffer->reset();
-                    $this->_bufferRecv[$current] = $receiveBuffer;
-
-                    return true;
-                }
-
-                if (isset($this->_bufferSend[$current])) {
-                    /** @var Buffer $sendBuffer */
-                    $sendBuffer = $this->_bufferSend[$current];
-                    if ($sendBuffer->isEmpty()) {
-                        $this->closeConnection($current);
-                    }
-                }
-                else {
+            if (isset($this->_bufferSend[$current])) {
+                /** @var Buffer $sendBuffer */
+                $sendBuffer = $this->_bufferSend[$current];
+                if ($sendBuffer->isEmpty()) {
                     $this->closeConnection($current);
                 }
+            }
+            else {
+                $this->closeConnection($current);
             }
         }
     }
@@ -391,7 +394,7 @@ abstract class Worker {
     abstract public function parseInput($buff);
 
     /**
-     * @param string $package
+     * @param $package
      * @return mixed
      */
     abstract public function dealBussiness($package);
@@ -405,6 +408,8 @@ abstract class Worker {
         if (false === $buff || empty($address)) {
             return false;
         }
+
+        $this->_currentClient = $address;
 
         return true;
     }
@@ -459,11 +464,10 @@ abstract class Worker {
 
     /**
      * @param      $content
-     * @param null $address
      */
-    public function sendToClient($content, $address = null) {
+    public function sendToClient($content) {
         if (self::SOCKET_PROTOCAL_TCP !== $this->_protocal) { // send UDP packages
-            stream_socket_sendto($this->_socket, $content, 0, $address);
+            stream_socket_sendto($this->_socket, $content, 0, $this->_currentClient);
 
             return true;
         }
@@ -481,7 +485,7 @@ abstract class Worker {
 
         /** @var Buffer $buffer */
         $buffer = $this->_bufferSend[$current];
-        $buffer->push($subContent);
+        $buffer->push($subContent); //TODO: limit output buffer max length
         $this->_bufferSend[$current] = $buffer;
 
         $this->_eventBase->add(
@@ -663,7 +667,6 @@ class WorkerStatus {
         $queue = Env::getInstance()->getMsgQueue();
         $msgType = $data = null;
         msg_receive($queue, Env::MSG_TYPE_STATUS, $msgType, 65535, $data, true);
-        var_dump($data);
 
         return $data;
     }

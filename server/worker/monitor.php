@@ -34,10 +34,6 @@ class Monitor extends Worker {
         return 0;
     }
 
-    /**
-     * @param $package
-     * @return mixed
-     */
     public function dealBussiness($package) {
         // TODO: Implement dealBussiness() method.
         $content = trim($package);
@@ -45,6 +41,9 @@ class Monitor extends Worker {
         switch ($content) {
             case 'status':
                 $this->sendToClient($this->_status->display() . "\n");
+                break;
+            default:
+                $this->sendToClient(sprintf("hey u, got it: %s\n", $content));
                 break;
         }
     }
