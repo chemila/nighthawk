@@ -42,6 +42,9 @@ class Monitor extends Worker {
             case 'status':
                 $this->sendToClient($this->_status->display() . "\n");
                 break;
+            case 'quit':
+                $this->closeConnection($this->_currentConnection);
+                break;
             default:
                 $this->sendToClient(sprintf("hey u, got it: %s\n", $content));
                 break;

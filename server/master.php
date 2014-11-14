@@ -16,26 +16,20 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 class Master {
     const MAX_CHILDREN = 10;
+
+    /**
+     * @desc errors
+     */
+    const ERROR_DAEMONIZE = 1;
+    const ERROR_SAVE_PID = 2;
+    const ERROR_INSTALL_SIGNAL = 4;
+    const ERROR_ALREADY_RUNNING = 8;
+    const ERROR_SOCKET_LISTEN = 16;
     const ERROR_FORK = 32;
 
     /**
-     *
+     * @var array
      */
-    const ERROR_DAEMONIZE = 1;
-    /**
-     *
-     */
-    const ERROR_SAVE_PID = 2;
-    /**
-     *
-     */
-    const ERROR_INSTALL_SIGNAL = 4;
-    /**
-     *
-     */
-    const ERROR_ALREADY_RUNNING = 8;
-    const ERROR_SOCKET_LISTEN = 16;
-
     private static $_sockets = array();
 
     /**
@@ -91,7 +85,7 @@ class Master {
     private $_pidFile;
 
     /**
-     *
+     * @desc init env
      */
     function __construct() {
         $this->_IPCKey = Env::getInstance()->getIPCKey();
@@ -114,7 +108,7 @@ class Master {
     }
 
     /**
-     *
+     * @desc daemonize master
      */
     private function _daemonize() {
         umask(0);
@@ -151,7 +145,7 @@ class Master {
     }
 
     /**
-     *
+     * @desc save master pid to a file, see Env & config
      */
     private function _savePid() {
         $this->_pid = posix_getpid();
@@ -165,7 +159,7 @@ class Master {
     }
 
     /**
-     *
+     * @desc loop signal
      */
     private function _loop() {
         for (; ;) {
@@ -175,7 +169,7 @@ class Master {
     }
 
     /**
-     *
+     * @desc setup signal handler
      */
     private function _installSignal() {
         foreach (self::$_sigIgnore as $signo) {
@@ -191,18 +185,16 @@ class Master {
     }
 
     /**
+     * TODO: setup all signal handlers
      * @param $signo
      * @return bool
      */
     public function signalHandler($signo) {
         switch ($signo) {
-            //用户自定义信号
-            case SIGUSR1: //busy
+            case SIGUSR1:
                 break;
-            //子进程结束信号
             case SIGCHLD:
                 break;
-            //中断进程
             case SIGTERM:
                 Log::write('SIGTERM received');
                 break;
@@ -212,11 +204,13 @@ class Master {
             case SIGQUIT:
                 break;
             default:
-                return false;
+                break;
         }
-
     }
 
+    /**
+     * @desc fork all workers
+     */
     private function _spawnWorkers() {
         $config = Config::getInstance()->getAllWorkers();
 
@@ -256,6 +250,10 @@ class Master {
         }
     }
 
+    /**
+     * @param $name
+     * @return bool
+     */
     private function _forkWorker($name) {
         $pid = pcntl_fork();
         pcntl_signal_dispatch();
@@ -296,9 +294,5 @@ class Master {
         $worker->start();
 
         return false;
-    }
-
-    private function _saveWorkers() {
-
     }
 }
