@@ -15,7 +15,7 @@ class Task {
     private static $_tasks = array();
 
     /**
-     * @param \NHK\System\Event $eventBase
+     * @param Event $eventBase
      * @return bool
      */
     public static function init($eventBase = null) {

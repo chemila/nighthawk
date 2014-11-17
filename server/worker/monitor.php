@@ -9,7 +9,7 @@ use NHK\System\Process;
 use NHK\system\Task;
 
 class Monitor extends Worker {
-    const INTERVAL_MASTER_HEATBEAT = 2;
+    const INTERVAL_MASTER_HEATBEAT = 60;
 
     /**
      * @desc main job goes here
@@ -24,7 +24,7 @@ class Monitor extends Worker {
      */
     public function checkHeatBeat() {
         if ($pid = Process::isMasterRunning()) {
-            Core::alert('master is running', false);
+            Core::alert(posix_getpid() . ' master is running', false);
             Log::write('master is running, pid is: ' . $pid);
         }
         else {

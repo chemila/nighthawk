@@ -96,7 +96,7 @@ class Config {
     /**
      * @desc reload
      */
-    public function reload() {
+    public static function reload() {
         self::$_instance = null;
         self::getInstance();
     }

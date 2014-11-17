@@ -321,7 +321,7 @@ abstract class Worker {
         $this->onStop();
 
         if ($this->_runState != self::STATE_SHUTDOWN) {
-            $this->_eventBase->remove(self::EVENT_SOCKET_TCP, EV_READ);
+            $this->_eventBase->remove(EV_READ, $this->_socket);
             fclose($this->_socket);
             $this->_runState = self::STATE_SHUTDOWN;
         }
@@ -374,8 +374,8 @@ abstract class Worker {
         $connection = intval($connection);
 
         if ($this->_protocal != self::EVENT_SOCKET_UDP && isset($this->_connections[$connection])) {
-            $this->_eventBase->remove($this->_name . $connection, EV_READ);
-            $this->_eventBase->remove($this->_name . $connection, EV_WRITE);
+            $this->_eventBase->remove(EV_READ, $connection);
+            $this->_eventBase->remove(EV_WRITE, $connection);
             fclose($this->_connections[$connection]);
         }
 
@@ -456,6 +456,7 @@ abstract class Worker {
      * @desc reload
      */
     public function reload() {
+        Core::alert('reload worker now', false);
         $this->onReload();
     }
 

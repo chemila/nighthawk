@@ -20,18 +20,8 @@ class Master {
     const STATE_START = 1;
     const STATE_SHUTDOWN = 2;
     const STATE_RUNNING = 4;
-    const STATE_RELOAD = 8;
+    const STATE_RESTART = 8;
     const KILL_WAIT = 5;
-    /**
-     * @desc errors
-     */
-    const ERROR_DAEMONIZE = 1;
-    const ERROR_SAVE_PID = 2;
-    const ERROR_INSTALL_SIGNAL = 4;
-    const ERROR_ALREADY_RUNNING = 8;
-    const ERROR_SOCKET_LISTEN = 16;
-    const ERROR_FORK = 32;
-
     /**
      * @var array
      */
@@ -41,6 +31,7 @@ class Master {
      * @var array
      */
     private static $_workers = array();
+    private static $_workersMap = array();
 
     /**
      * @var array
@@ -106,6 +97,7 @@ class Master {
      */
     public function run() {
         Core::alert('start to run', false);
+        $this->_runningState = self::STATE_START;
         $this->_daemonize();
         $this->_savePid();
         $this->_installSignal();
@@ -122,13 +114,13 @@ class Master {
 
         if ($oldPid = Process::isMasterRunning()) {
             Core::alert("already running, pid: " . $oldPid, true);
-            exit(self::ERROR_ALREADY_RUNNING);
+            exit(1);
         }
 
         $pid = pcntl_fork();
         if (-1 == $pid) {
             Core::alert('fork error: ' . posix_strerror(posix_get_last_error()));
-            exit(self::ERROR_DAEMONIZE);
+            exit(1);
         }
         elseif ($pid > 0) {
             exit(0);
@@ -136,13 +128,13 @@ class Master {
 
         if (-1 == posix_setsid()) {
             Core::alert('setsid error: ' . posix_strerror(posix_get_last_error()));
-            exit(self::ERROR_DAEMONIZE);
+            exit(1);
         }
 
         $pid2 = pcntl_fork();
         if (-1 == $pid2) {
             Core::alert('fork error: ' . posix_strerror(posix_get_last_error()));
-            exit(self::ERROR_DAEMONIZE);
+            exit(1);
         }
         elseif (0 !== $pid2) {
             exit(0);
@@ -159,7 +151,7 @@ class Master {
 
         if (false === @file_put_contents($this->_pidFile, $this->_pid)) {
             Core::alert('cant save pid in file: ' . $this->_pidFile);
-            exit(self::ERROR_SAVE_PID);
+            exit(1);
         }
 
         chmod($this->_pidFile, 0644);
@@ -172,6 +164,7 @@ class Master {
         $this->_runningState = self::STATE_RUNNING;
         for (; ;) {
             sleep(1);
+            $this->_checkWorkers();
             pcntl_signal_dispatch();
         }
     }
@@ -187,7 +180,7 @@ class Master {
         foreach (self::$_sigHandle as $signo) {
             if (!pcntl_signal($signo, array($this, 'signalHandler'), false)) {
                 Core::alert('install signal failed');
-                exit(self::ERROR_INSTALL_SIGNAL);
+                exit(1);
             }
         }
     }
@@ -204,14 +197,13 @@ class Master {
                 break;
             case SIGCHLD:
                 break;
-            case SIGTERM:
-                Log::write('SIGTERM received');
-                break;
             case SIGHUP:
                 Log::write('SIGHUP received');
+                Config::reload();
+                $this->_restartWorkers();
                 break;
             case SIGINT:
-                $this->stop();
+                $this->_stop();
                 break;
             default:
                 break;
@@ -223,9 +215,8 @@ class Master {
      */
     private function _spawnWorkers() {
         $config = Config::getInstance()->getAllWorkers();
-
         foreach ($config as $name => $array) {
-            if (isset($array['listen'])) {
+            if (isset($array['listen']) && !isset(self::$_sockets[$name])) {
                 $flags = strtolower(substr($array['listen'], 0, 3)) == 'udp'
                     ?
                     STREAM_SERVER_BIND
@@ -237,7 +228,7 @@ class Master {
                 self::$_sockets[$name] = stream_socket_server($array['listen'], $code, $msg, $flags);
                 if (!self::$_sockets[$name]) {
                     Core::alert('socket server listen failed, msg: ' . $msg, true);
-                    exit(self::ERROR_SOCKET_LISTEN);
+                    exit(1);
                 }
             }
 
@@ -246,12 +237,11 @@ class Master {
             }
 
             $children = isset($array['start_workers']) ? (int)$array['start_workers'] : 1;
-
             while (count(self::$_workers[$name]) < min($children, self::MAX_CHILDREN)) {
                 if (!$this->_forkWorker($name)) {
                     Core::alert('worker exit');
                     Log::write(sprintf('worker %s exit loop', $name));
-                    exit(self::ERROR_FORK);
+                    exit(1);
                 }
                 else {
                     Core::alert('fork worker: ' . $name, false);
@@ -275,12 +265,7 @@ class Master {
         }
 
         if ($pid > 0) {
-            if (isset(self::$_workers[$name])) {
-                array_push(self::$_workers[$name], $pid);
-            }
-            else {
-                self::$_workers[$name] = array($pid);
-            }
+            $this->_addWorker($name, $pid);
 
             return $pid;
         }
@@ -314,7 +299,7 @@ class Master {
     /**
      * @desc catch signal SIGINT to stop workers and master
      */
-    public function stop() {
+    private function _stop() {
         if (empty(self::$_workers)) {
             Core::alert('no worker running, exit now!', false);
             exit(0);
@@ -323,7 +308,7 @@ class Master {
         $this->_runningState = self::STATE_SHUTDOWN;
 
         foreach (self::$_workers as $workerName => $pids) {
-            $this->killWorker($workerName);
+            $this->_killWorker($workerName);
         }
 
         Core::alert('master exit now');
@@ -331,10 +316,11 @@ class Master {
     }
 
     /**
-     * @param $name
+     * @param string $name
+     * @param bool   $restart
      * @return bool
      */
-    public function killWorker($name) {
+    private function _killWorker($name, $restart = false) {
         if (!array_key_exists($name, self::$_workers)) {
             Core::alert('worker not exist: ' . $name);
 
@@ -343,7 +329,9 @@ class Master {
 
         $workerPids = self::$_workers[$name];
         foreach ($workerPids as $pid) {
-            posix_kill($pid, SIGINT);
+            if (posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
+                $this->_rmWorker($pid, $name);
+            }
         }
 
         Task::add(
@@ -358,5 +346,68 @@ class Master {
 
     public function test() {
         Core::alert('test', false);
+    }
+
+    private function _restartWorkers() {
+        if ($this->_runningState == self::STATE_SHUTDOWN) {
+            return false;
+        }
+
+        $this->_runningState = self::STATE_RESTART;
+        if (empty(self::$_workers)) {
+            return false;
+        }
+
+        foreach (self::$_workers as $name => $pids) {
+            $this->_killWorker($name, true);
+        }
+
+        $this->_runningState = self::STATE_RUNNING;
+    }
+
+    private function _checkWorkers() {
+        while (($pid = pcntl_waitpid(-1, $status, WNOHANG | WUNTRACED)) != 0) {
+            if (0 != $status) {
+                Core::alert('worker exit code: ' . $status);
+            }
+
+            $this->_clearWorker($pid);
+
+            if ($this->_runningState == self::STATE_SHUTDOWN) {
+                Core::alert('master is shutdown');
+                exit(0);
+            }
+
+            $this->_spawnWorkers();
+        }
+    }
+
+    private function _clearWorker($pid) {
+        $this->_rmWorker($pid);
+    }
+
+    private function _addWorker($name, $pid) {
+        self::$_workersMap[$pid] = $name;
+
+        if (!array_key_exists($name, self::$_workers)) {
+            self::$_workers[$name] = array($pid);
+        }
+        else {
+            self::$_workers[$name][$pid] =  $pid;
+        }
+    }
+
+    private function _rmWorker($pid, $name = null) {
+        if (!$name && array_key_exists($pid, self::$_workersMap)) {
+            $name = self::$_workersMap[$pid];
+        }
+        unset(self::$_workersMap[$pid]);
+        if (!array_key_exists($name, self::$_workers)) {
+            return false;
+        }
+
+        unset(self::$_workers[$name][$pid]);
+
+        return true;
     }
 }

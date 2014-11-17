@@ -45,7 +45,6 @@ class Event {
      */
     public function add($flag, $fd, $func, $args = array()) {
         if (!$this->_checkEventFlag($flag)) {
-            Core::alert('invalid event flag');
 
             return false;
         }
