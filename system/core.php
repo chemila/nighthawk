@@ -202,10 +202,10 @@ class Core {
      */
     public static function alert($message, $isError = true) {
         if (true === $isError) {
-            printf("\033[31;40m%s\033[0m\n", $message);
+            printf("%s \033[31;40m%s\033[0m\n", date('Y-m-d H:i:s'), $message);
         }
         else {
-            printf("\033[32;49m%s\033[0m\n", $message);
+            printf("%s \033[32;49m%s\033[0m\n", date('Y-m-d H:i:s'), $message);
         }
     }
 

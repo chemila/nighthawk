@@ -4,6 +4,7 @@ namespace NHK\Server;
 use NHK\System\Config;
 use NHK\System\Core;
 use NHK\System\Env;
+use NHK\System\Exception;
 use NHK\System\Log;
 use NHK\System\Process;
 use NHK\system\Task;
@@ -16,21 +17,42 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * @package NHK\Server
  */
 class Master {
+    const PROTOCAL_UDP = 'udp';
+    /**
+     * @desc limit max workers children
+     */
     const MAX_CHILDREN = 10;
+    /**
+     * @desc init state
+     */
     const STATE_START = 1;
+    /**
+     * @desc stop
+     */
     const STATE_SHUTDOWN = 2;
+    /**
+     * @desc master is in loop
+     */
     const STATE_RUNNING = 4;
+    /**
+     * @decs restart workers
+     */
     const STATE_RESTART = 8;
+    /**
+     * @desc seconds wait to force kill worker
+     */
     const KILL_WAIT = 5;
     /**
      * @var array
      */
     private static $_sockets = array();
-
     /**
      * @var array
      */
     private static $_workers = array();
+    /**
+     * @var array
+     */
     private static $_workersMap = array();
 
     /**
@@ -56,11 +78,6 @@ class Master {
             SIGALRM,
         );
     /**
-     * @var string
-     */
-    private $_IPCKey;
-
-    /**
      * @var resource
      */
     private $_shm;
@@ -69,7 +86,7 @@ class Master {
      */
     private $_msg;
     /**
-     * @var
+     * @var int
      */
     private $_pid;
     /**
@@ -85,7 +102,6 @@ class Master {
      * @desc init env
      */
     function __construct() {
-        $this->_IPCKey = Env::getInstance()->getIPCKey();
         $this->_shm = Env::getInstance()->getShm();
         $this->_msg = Env::getInstance()->getMsgQueue();
         $this->_pidFile = Env::getInstance()->getPIDFile();
@@ -93,7 +109,7 @@ class Master {
     }
 
     /**
-     *
+     * @desc main
      */
     public function run() {
         Core::alert('start to run', false);
@@ -217,14 +233,10 @@ class Master {
         $config = Config::getInstance()->getAllWorkers();
         foreach ($config as $name => $array) {
             if (isset($array['listen']) && !isset(self::$_sockets[$name])) {
-                $flags = strtolower(substr($array['listen'], 0, 3)) == 'udp'
-                    ?
-                    STREAM_SERVER_BIND
-                    :
-                    STREAM_SERVER_BIND | STREAM_SERVER_LISTEN;
+                $flags = strtolower(substr($array['listen'], 0, 3)) == self::PROTOCAL_UDP
+                    ? STREAM_SERVER_BIND
+                    : STREAM_SERVER_BIND | STREAM_SERVER_LISTEN;
 
-                $code = 0;
-                $msg = '';
                 self::$_sockets[$name] = stream_socket_server($array['listen'], $code, $msg, $flags);
                 if (!self::$_sockets[$name]) {
                     Core::alert('socket server listen failed, msg: ' . $msg, true);
@@ -301,7 +313,7 @@ class Master {
      */
     private function _stop() {
         if (empty(self::$_workers)) {
-            Core::alert('no worker running, exit now!', false);
+            Core::alert('no worker running, exit now!');
             exit(0);
         }
 
@@ -311,14 +323,14 @@ class Master {
             $this->_killWorker($workerName);
         }
 
-        Core::alert('master exit now');
-        exit(0);
+        Core::alert('master is going to shutdown');
     }
 
     /**
-     * @param string $name
-     * @param bool   $restart
+     * @param      $name
+     * @param bool $restart
      * @return bool
+     * @throws Exception
      */
     private function _killWorker($name, $restart = false) {
         if (!array_key_exists($name, self::$_workers)) {
@@ -328,9 +340,10 @@ class Master {
         }
 
         $workerPids = self::$_workers[$name];
-        foreach ($workerPids as $pid) {
-            if (posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
-                $this->_rmWorker($pid, $name);
+        foreach ($workerPids as $pid => $startTime) {
+            Core::alert('kill worker with signal');
+            if (!posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
+                throw new Exception('worker pid is invalid');
             }
         }
 
@@ -344,10 +357,9 @@ class Master {
         return true;
     }
 
-    public function test() {
-        Core::alert('test', false);
-    }
-
+    /**
+     * @desc restart workers, kill -1|-9
+     */
     private function _restartWorkers() {
         if ($this->_runningState == self::STATE_SHUTDOWN) {
             return false;
@@ -365,27 +377,53 @@ class Master {
         $this->_runningState = self::STATE_RUNNING;
     }
 
+    /**
+     * @desc make sure worker is running
+     */
     private function _checkWorkers() {
         while (($pid = pcntl_waitpid(-1, $status, WNOHANG | WUNTRACED)) != 0) {
             if (0 != $status) {
                 Core::alert('worker exit code: ' . $status);
             }
 
-            $this->_clearWorker($pid);
+            $this->_rmWorker($pid); // remove worker from working list
 
             if ($this->_runningState == self::STATE_SHUTDOWN) {
-                Core::alert('master is shutdown');
-                exit(0);
+                if (!$this->_hasWorker()) {
+                    $this->_clearWorker($pid);
+                    Core::alert('master is shutdown');
+                    exit(0);
+                }
             }
-
-            $this->_spawnWorkers();
+            else {
+                $this->_spawnWorkers();
+            }
         }
     }
 
+    /**
+     * @param $pid
+     */
     private function _clearWorker($pid) {
-        $this->_rmWorker($pid);
+        if (is_resource($this->_shm)) {
+            shm_remove($this->_shm);
+        }
+
+        if (is_resource($this->_msg)) {
+            msg_remove_queue($this->_msg);
+        }
+
+        foreach (self::$_sockets as $name => $socket) {
+            if (is_resource($socket)) {
+                fclose($socket);
+            }
+        }
     }
 
+    /**
+     * @param $name
+     * @param $pid
+     */
     private function _addWorker($name, $pid) {
         self::$_workersMap[$pid] = $name;
 
@@ -393,14 +431,20 @@ class Master {
             self::$_workers[$name] = array($pid);
         }
         else {
-            self::$_workers[$name][$pid] =  $pid;
+            self::$_workers[$name][$pid] = time();
         }
     }
 
+    /**
+     * @param      $pid
+     * @param null $name
+     * @return bool
+     */
     private function _rmWorker($pid, $name = null) {
         if (!$name && array_key_exists($pid, self::$_workersMap)) {
             $name = self::$_workersMap[$pid];
         }
+
         unset(self::$_workersMap[$pid]);
         if (!array_key_exists($name, self::$_workers)) {
             return false;
@@ -409,5 +453,23 @@ class Master {
         unset(self::$_workers[$name][$pid]);
 
         return true;
+    }
+
+    /**
+     * @desc check any worker is running or not
+     * @return bool
+     */
+    private function _hasWorker() {
+        if (empty(self::$_workers) || empty(self::$_workersMap)) {
+            return false;
+        }
+
+        foreach (self::$_workers as $name => $pids) {
+            if (!empty($pids)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
