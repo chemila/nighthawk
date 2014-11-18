@@ -97,6 +97,10 @@ class Master {
      * @var int
      */
     private $_runningState = self::STATE_START;
+    /**
+     * @var array
+     */
+    private $_report = array();
 
     /**
      * @desc init env
@@ -113,6 +117,7 @@ class Master {
      */
     public function run() {
         Core::alert('start to run', false);
+        $this->_addReport('startTime', time());
         $this->_runningState = self::STATE_START;
         $this->_daemonize();
         $this->_savePid();
@@ -120,6 +125,25 @@ class Master {
         $this->_spawnWorkers();
         Task::init();
         $this->_loop();
+    }
+
+    /**
+     * @param     $name
+     * @param int $count
+     * @return $this
+     */
+    private function _addReport($name, $count = 1) {
+        if (!array_key_exists($name, $this->_report)) {
+            $this->_report[$name] = $count;
+        }
+        else {
+            $this->_report[$name] += $count;
+        }
+
+        $this->_report['sysLoadAvg'] = sys_getloadavg();
+        $this->_report['memoryUsage'] = memory_get_usage();
+
+        return $this;
     }
 
     /**
@@ -174,18 +198,6 @@ class Master {
     }
 
     /**
-     * @desc loop signal
-     */
-    private function _loop() {
-        $this->_runningState = self::STATE_RUNNING;
-        for (; ;) {
-            sleep(1);
-            $this->_checkWorkers();
-            pcntl_signal_dispatch();
-        }
-    }
-
-    /**
      * @desc setup signal handler
      */
     private function _installSignal() {
@@ -198,31 +210,6 @@ class Master {
                 Core::alert('install signal failed');
                 exit(1);
             }
-        }
-    }
-
-    /**
-     * TODO: setup all signal handlers
-     *
-     * @param $signo
-     * @return bool
-     */
-    public function signalHandler($signo) {
-        switch ($signo) {
-            case SIGUSR1:
-                break;
-            case SIGCHLD:
-                break;
-            case SIGHUP:
-                Log::write('SIGHUP received');
-                Config::reload();
-                $this->_restartWorkers();
-                break;
-            case SIGINT:
-                $this->_stop();
-                break;
-            default:
-                break;
         }
     }
 
@@ -254,9 +241,6 @@ class Master {
                     Core::alert('worker exit');
                     Log::write(sprintf('worker %s exit loop', $name));
                     exit(1);
-                }
-                else {
-                    Core::alert('fork worker: ' . $name, false);
                 }
             }
         }
@@ -309,72 +293,32 @@ class Master {
     }
 
     /**
-     * @desc catch signal SIGINT to stop workers and master
+     * @param $name
+     * @param $pid
      */
-    private function _stop() {
-        if (empty(self::$_workers)) {
-            Core::alert('no worker running, exit now!');
-            exit(0);
-        }
+    private function _addWorker($name, $pid) {
+        self::$_workersMap[$pid] = $name;
+        $this->_addReport('workerTotalCreated');
 
-        $this->_runningState = self::STATE_SHUTDOWN;
-
-        foreach (self::$_workers as $workerName => $pids) {
-            $this->_killWorker($workerName);
-        }
-
-        Core::alert('master is going to shutdown');
-    }
-
-    /**
-     * @param      $name
-     * @param bool $restart
-     * @return bool
-     * @throws Exception
-     */
-    private function _killWorker($name, $restart = false) {
         if (!array_key_exists($name, self::$_workers)) {
-            Core::alert('worker not exist: ' . $name);
-
-            return false;
+            self::$_workers[$name] = array($pid);
         }
-
-        $workerPids = self::$_workers[$name];
-        foreach ($workerPids as $pid => $startTime) {
-            Core::alert('kill worker with signal');
-            if (!posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
-                throw new Exception('worker pid is invalid');
-            }
+        else {
+            self::$_workers[$name][$pid] = time();
         }
-
-        Task::add(
-            'kill_worker_' . $name,
-            self::KILL_WAIT,
-            array('NHK\\System\\Process', 'forceKill'), null, false,
-            array($workerPids)
-        );
-
-        return true;
     }
 
     /**
-     * @desc restart workers, kill -1|-9
+     * @desc loop signal
      */
-    private function _restartWorkers() {
-        if ($this->_runningState == self::STATE_SHUTDOWN) {
-            return false;
-        }
-
-        $this->_runningState = self::STATE_RESTART;
-        if (empty(self::$_workers)) {
-            return false;
-        }
-
-        foreach (self::$_workers as $name => $pids) {
-            $this->_killWorker($name, true);
-        }
-
+    private function _loop() {
         $this->_runningState = self::STATE_RUNNING;
+        for (; ;) {
+            sleep(1);
+            $this->_checkWorkers();
+            $this->_syncReport();
+            pcntl_signal_dispatch();
+        }
     }
 
     /**
@@ -386,6 +330,7 @@ class Master {
                 Core::alert('worker exit code: ' . $status);
             }
 
+            $this->_addReport('workerExitUnexpected');
             $this->_rmWorker($pid); // remove worker from working list
 
             if ($this->_runningState == self::STATE_SHUTDOWN) {
@@ -398,40 +343,6 @@ class Master {
             else {
                 $this->_spawnWorkers();
             }
-        }
-    }
-
-    /**
-     * @param $pid
-     */
-    private function _clearWorker($pid) {
-        if (is_resource($this->_shm)) {
-            shm_remove($this->_shm);
-        }
-
-        if (is_resource($this->_msg)) {
-            msg_remove_queue($this->_msg);
-        }
-
-        foreach (self::$_sockets as $name => $socket) {
-            if (is_resource($socket)) {
-                fclose($socket);
-            }
-        }
-    }
-
-    /**
-     * @param $name
-     * @param $pid
-     */
-    private function _addWorker($name, $pid) {
-        self::$_workersMap[$pid] = $name;
-
-        if (!array_key_exists($name, self::$_workers)) {
-            self::$_workers[$name] = array($pid);
-        }
-        else {
-            self::$_workers[$name][$pid] = time();
         }
     }
 
@@ -450,6 +361,7 @@ class Master {
             return false;
         }
 
+        $this->_addReport('workerRemoved');
         unset(self::$_workers[$name][$pid]);
 
         return true;
@@ -471,5 +383,120 @@ class Master {
         }
 
         return false;
+    }
+
+    /**
+     * @param $pid
+     */
+    private function _clearWorker($pid) {
+        if (is_resource($this->_shm)) {
+            shm_remove($this->_shm);
+        }
+
+        if (is_resource($this->_msg)) {
+            msg_remove_queue($this->_msg);
+        }
+    }
+
+    /**
+     * @return bool
+     */
+    private function _syncReport() {
+        $this->_report['workers'] = self::$_workers;
+
+        return shm_put_var($this->_shm, Env::SHM_REPORT, $this->_report);
+    }
+
+    /**
+     * TODO: setup all signal handlers
+     *
+     * @param $signo
+     * @return bool
+     */
+    public function signalHandler($signo) {
+        switch ($signo) {
+            case SIGHUP:
+                Log::write('SIGHUP received');
+                Config::reload();
+                $this->_restartWorkers();
+                break;
+            case SIGINT:
+                $this->_stop();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * @desc restart workers, kill -1|-9
+     */
+    private function _restartWorkers() {
+        if ($this->_runningState == self::STATE_SHUTDOWN) {
+            return false;
+        }
+
+        $this->_runningState = self::STATE_RESTART;
+        if (empty(self::$_workers)) {
+            return false;
+        }
+
+        foreach (self::$_workers as $name => $pids) {
+            $this->_killWorker($name, true);
+        }
+
+        $this->_runningState = self::STATE_RUNNING;
+
+        return true;
+    }
+
+    /**
+     * @param      $name
+     * @param bool $restart
+     * @return bool
+     * @throws Exception
+     */
+    private function _killWorker($name, $restart = false) {
+        Core::alert('stopping worker: ' . $name);
+        if (!array_key_exists($name, self::$_workers)) {
+            Core::alert('worker not exist: ' . $name);
+
+            return false;
+        }
+
+        $workerPids = self::$_workers[$name];
+        foreach ($workerPids as $pid => $startTime) {
+            if (!posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
+                throw new Exception('worker pid is invalid');
+            }
+            $this->_addReport('workerKilled');
+        }
+
+        Task::add(
+            'kill_worker_' . $name,
+            self::KILL_WAIT,
+            array('NHK\\System\\Process', 'forceKill'), null, false,
+            array($workerPids)
+        );
+
+        return true;
+    }
+
+    /**
+     * @desc catch signal SIGINT to stop workers and master
+     */
+    private function _stop() {
+        if (empty(self::$_workers)) {
+            Core::alert('no worker running, exit now!');
+            exit(0);
+        }
+
+        $this->_runningState = self::STATE_SHUTDOWN;
+
+        foreach (self::$_workers as $workerName => $pids) {
+            $this->_killWorker($workerName);
+        }
+
+        Core::alert('master is going to shutdown');
     }
 }

@@ -27,6 +27,8 @@ class Env {
 
     const MSG_TYPE_STATUS = 1;
     const MSG_TYPE_FILES = 2;
+
+    const SHM_REPORT = 1;
     /**
      * @var array
      */

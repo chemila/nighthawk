@@ -39,9 +39,6 @@ switch ($cmd) {
     case 'reload':
         NHK\System\Process::reload();
         break;
-    case 'kill':
-        NHK\System\Process::killMaster();
-        break;
     case 'status':
         NHK\System\Process::status();
         break;
@@ -54,6 +51,6 @@ switch ($cmd) {
 }
 
 function showUsage() {
-    printf("Usage: %s {start|stop|restart|reload|kill|status|version}\n", __FILE__);
+    printf("Usage: %s {start|stop|restart|reload|status|version}\n", __FILE__);
     exit(0);
 }

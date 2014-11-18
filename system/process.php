@@ -61,12 +61,15 @@ class Process {
      * @return bool
      */
     public static function killMaster() {
+        Core::alert('force to kill master');
         $pid = self::checkProcess();
         if ($pid <= 0) {
             return false;
         }
 
         if (!posix_kill($pid, SIGKILL)) {
+            Core::alert('kill master failed');
+
             return false;
         }
 
@@ -97,6 +100,8 @@ class Process {
     public static function reload() {
         $pid = self::checkProcess();
         if ($pid <= 0) {
+            Core::alert('master is not running');
+
             return false;
         }
 
@@ -114,6 +119,7 @@ class Process {
     public static function stop($waitTime = 10) {
         $pid = self::checkProcess();
         if ($pid <= 0) {
+            Core::alert('master is not running');
             return false;
         }
 
@@ -125,10 +131,11 @@ class Process {
             usleep(1000);
             if (time() - $startTime >= $waitTime) {
                 self::killMaster();
-                usleep(500000);
                 break;
             }
         }
+
+        Core::alert('master is stopped', false);
 
         return true;
     }
@@ -142,7 +149,7 @@ class Process {
         if (!$sock) {
             Core::alert("socket client address not exist");
         }
-        fwrite($sock, 'status');
+        fwrite($sock, 'report');
         $reads = array($sock);
         $writes = $exceptions = array();
 
@@ -161,6 +168,9 @@ class Process {
         }
     }
 
+    /**
+     * @return bool
+     */
     public static function closeSTD() {
         global $STDERR, $STDOUT;
 
@@ -173,8 +183,14 @@ class Process {
 
         $STDOUT = fopen('/dev/null', "rw+");
         $STDERR = fopen('/dev/null', "rw+");
+
+        return true;
     }
 
+    /**
+     * @param $title
+     * @return bool
+     */
     public static function setProcessTitle($title) {
         if (extension_loaded('proctitle') && function_exists('setproctitle')) {
             @setproctitle($title);

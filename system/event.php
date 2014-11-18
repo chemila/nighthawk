@@ -56,7 +56,6 @@ class Event {
         }
 
         $key = $this->_genEventName($flag, $fd);
-        Core::alert('add event: ' . $key, false);
         $this->_entities[$key] = $event = event_new();
 
         if (!event_set($event, $fd, $flag | EV_PERSIST, $func, $args)) {

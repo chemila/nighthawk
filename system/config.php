@@ -15,9 +15,9 @@ class Config {
     /**
      * @var array
      */
-    public static $config = array();
+    public static $data = array();
     /**
-     * @var
+     * @var $this
      */
     private static $_instance;
 
@@ -27,13 +27,13 @@ class Config {
     private function __construct() {
         $fileMaster = NHK_PATH_CONF . 'master.conf';
         if (!file_exists($fileMaster)) {
-            throw new \Exception("invalid master conf file");
+            throw new \Exception("invalid master config file");
         }
-        self::$config['master'] = self::parseFile($fileMaster);
+        self::$data['master'] = self::parseFile($fileMaster);
         self::$fileMaster = realpath($fileMaster);
         foreach (glob(NHK_PATH_CONF . 'workers/*.conf') as $fileWorker) {
             $workerName = basename($fileWorker, '.conf');
-            self::$config[$workerName] = self::parseFile($fileWorker);
+            self::$data[$workerName] = self::parseFile($fileWorker);
         }
     }
 
@@ -68,7 +68,7 @@ class Config {
      * @return string
      */
     public function get($uri, $default = null) {
-        $node = self::$config;
+        $node = self::$data;
         $paths = explode('.', $uri);
 
         while (!empty($paths)) {
@@ -87,7 +87,7 @@ class Config {
      * @return array
      */
     public function getAllWorkers() {
-        $copy = self::$config;
+        $copy = self::$data;
         unset($copy['master']);
 
         return $copy;

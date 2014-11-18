@@ -229,6 +229,19 @@ abstract class Worker {
     }
 
     /**
+     * @return bool|mixed
+     */
+    public function getReport() {
+        $shmId = Env::getInstance()->getShm();
+
+        if (shm_has_var($shmId, Env::SHM_REPORT)) {
+            return shm_get_var($shmId, Env::SHM_REPORT);
+        }
+
+        return false;
+    }
+
+    /**
      * @param $connection
      * @param $events
      * @param $args
@@ -329,10 +342,6 @@ abstract class Worker {
         if ($this->checkConnection()) {
             exit(0);
         }
-    }
-
-    public function test() {
-        Core::alert('this is a test on worker');
     }
 
     /**
@@ -726,4 +735,5 @@ class WorkerStatus {
     public function display() {
         return json_encode($this->data);
     }
+
 }

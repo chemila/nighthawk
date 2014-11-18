@@ -57,13 +57,14 @@ class Monitor extends Worker {
             case 'quit':
                 $this->closeConnection($this->_currentConnection);
                 break;
-            case 'event':
-                $data = $this->_eventBase->display();
-                $this->sendToClient(json_encode($data) . "\n");
-                break;
-            case 'task':
-                $data = Task::display();
-                $this->sendToClient(json_encode($data) . "\n");
+            case 'report':
+                $report = $this->getReport();
+                if ($report) {
+                    $this->sendToClient(json_encode($report) . "\n");
+                }
+                else {
+                    $this->sendToClient("get report failed\n");
+                }
                 break;
             default:
                 $this->sendToClient(sprintf("hey u, got it: %s\n", $content));
