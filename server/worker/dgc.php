@@ -5,7 +5,9 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
+use NHK\System\Env;
 use NHK\System\Exception;
+use NHK\system\Strategy;
 use NHK\system\Task;
 use NHK\Vendor\rabbitmq\Consumer;
 
@@ -15,12 +17,18 @@ class DGC extends Worker {
      */
     private $_consumer;
     /**
+     * @var Strategy
+     */
+    private $_strategy;
+
+    /**
      * @return mixed
      */
     public function run() {
         // TODO: Implement run() method.
         $this->_prepareConsumer();
-        Task::add('consume', 10, array($this, 'dealBussiness'));
+        $this->_strategy = new Strategy($this->_name);
+        Task::add('consume', 3, array($this, 'dealBussiness'));
     }
 
     /**
@@ -37,25 +45,34 @@ class DGC extends Worker {
      */
     public function dealBussiness($package) {
         // TODO: Implement dealBussiness() method.
-        Core::alert('test');
+        $message = $this->_consumer->get();
+        if (empty($message)) {
+            Core::alert('no message receive');
+        }
+        else {
+            Core::alert('got: ' . $message, false);
+            if ($this->_strategy->parse($message)) {
+                $this->_incException($this->_strategy->getName(), $this->_strategy->getFrequency());
+            }
+        }
     }
 
     private function _prepareConsumer() {
-        $allConfig = Config::getInstance()->get($this->_name);
+        $config = Config::getInstance()->get($this->_name);
         $consumerConfig = array(
-            'host' => $allConfig['amqp.host'],
-            'port' => $allConfig['amqp.port'],
-            'login' => $allConfig['amqp.login'],
-            'password' => $allConfig['amqp.password'],
-            'vhost' => $allConfig['amqp.vhost'],
-            'prefetch_count' => $allConfig['amqp.prefetch_count'],
-            'exname' => $allConfig['amqp.exname'],
-            'extype' => $allConfig['amqp.extype'],
-            'persist' => $allConfig['amqp.persist'],
-            'duable' => $allConfig['amqp.duable'],
-            'routing' => $allConfig['amqp.routing'],
-            'queue' => $allConfig['amqp.queue'],
-            'autoack' => $allConfig['amqp.auto_ack'],
+            'host' => $config['amqp.host'],
+            'port' => $config['amqp.port'],
+            'login' => $config['amqp.login'],
+            'password' => $config['amqp.password'],
+            'vhost' => $config['amqp.vhost'],
+            'prefetch_count' => $config['amqp.prefetch_count'],
+            'exname' => $config['amqp.exname'],
+            'extype' => $config['amqp.extype'],
+            'persist' => $config['amqp.persist'],
+            'duable' => $config['amqp.duable'],
+            'routing' => $config['amqp.routing'],
+            'queue' => $config['amqp.queue'],
+            'autoack' => $config['amqp.auto_ack'],
         );
 
         try {
@@ -66,5 +83,29 @@ class DGC extends Worker {
             Core::alert($e->getMessage());
             exit(1);
         }
+    }
+
+    private function _incException($count = 1) {
+        $shm = Env::getInstance()->getShm();
+        $data = array();
+        $name = $this->_strategy->getName();
+        if (shm_has_var($shm, Env::SHM_EXCEPTION_DGC)) {
+            $data = shm_get_var($shm, Env::SHM_EXCEPTION_DGC);
+            if (array_key_exists($name, $data)) {
+                $data[$name][0] += $count;
+            }
+            else {
+                $data[$name][0] = $count;
+                $data[$name][1] = time();
+            }
+        }
+        else {
+            $data[$name][0] = $count;
+            $data[$name][1] = time();
+        }
+
+        $data[$name][2] = $this->_strategy->getFrequency();
+        $data[$name][3] = $this->_strategy->getUsers();
+        return shm_put_var($shm, Env::SHM_EXCEPTION_DGC, $data);
     }
 }

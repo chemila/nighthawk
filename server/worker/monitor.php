@@ -18,7 +18,6 @@ class Monitor extends Worker {
      * @desc main job goes here
      */
     public function run() {
-        Core::alert('start to run: ' . $this->_name, false);
         Task::add('heatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
         Task::add('checkWorker', 10, array($this, 'checkWorkerStatus'));
     }

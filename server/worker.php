@@ -132,11 +132,14 @@ abstract class Worker {
         $this->installSignal();
         $this->installEvent();
         Task::init($this->_eventBase);
+        $this->onStart();
         $this->run();
-
-        Core::alert('start event loop', false);
         $this->_eventBase->loop();
         Core::alert('exit loop unexpected', true);
+    }
+
+    public function onStart() {
+        Core::alert('start to run: ' . $this->_name, false);
     }
 
     /**
@@ -541,14 +544,6 @@ abstract class Worker {
         $this->_bufferSend[$current] = $sendBuffer;
 
         return true;
-    }
-
-    /**
-     * @desc get include files
-     */
-    protected function syncFiles() {
-        $errorCode = 0;
-        $requiredFiles = array_flip(get_included_files());
     }
 }
 

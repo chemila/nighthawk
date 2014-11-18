@@ -128,7 +128,7 @@ class Master {
      * @desc main
      */
     public function run() {
-        Core::alert('start to run', false);
+        Core::alert('start to run master', false);
         $this->_addReport(self::REPORT_START_TIME, time());
         $this->_runningState = self::STATE_START;
         $this->_daemonize();
