@@ -146,7 +146,6 @@ class Core {
             // Create a text version of the exception
             $error = Core::displayException($e);
             self::alert($error);
-            self::alert($e->getTraceAsString());
             Log::write($error);
 
             return true;
@@ -171,10 +170,7 @@ class Core {
 
         if ($error = error_get_last() AND in_array($error['type'], Core::$shutdownErrors)) {
             // Fake an exception for nice debugging
-            Core::exceptionHandler(
-                new Exception($error['message'], $error['type'], 0, $error['file'], $error['line'])
-            );
-
+            self::exceptionHandler(new Exception($error['message']), $error['type'], $error['file'], $error['line']);
             // Shutdown now to avoid a "death loop"
             exit(1);
         }

@@ -132,7 +132,6 @@ abstract class Worker {
         $this->installSignal();
         $this->installEvent();
         Task::init($this->_eventBase);
-        $this->onStart();
         $this->run();
 
         Core::alert('start event loop', false);
@@ -175,12 +174,6 @@ abstract class Worker {
                 throw new Exception('add signal event failed, signal: ' . $signo);
             }
         }
-    }
-
-    /**
-     * @desc a hook when start to run worker
-     */
-    protected function onStart() {
     }
 
     /**

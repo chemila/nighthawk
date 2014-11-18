@@ -2,7 +2,9 @@
 namespace NHK\Server\Worker;
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
+use NHK\Server\Master;
 use NHK\Server\Worker;
+use NHK\System\Config;
 use NHK\System\Core;
 use NHK\System\Log;
 use NHK\System\Process;
@@ -10,6 +12,7 @@ use NHK\system\Task;
 
 class Monitor extends Worker {
     const INTERVAL_MASTER_HEATBEAT = 60;
+    const DEFAULT_MAX_EXIT = 100;
 
     /**
      * @desc main job goes here
@@ -17,6 +20,7 @@ class Monitor extends Worker {
     public function run() {
         Core::alert('start to run: ' . $this->_name, false);
         Task::add('heatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
+        Task::add('checkWorker', 10, array($this, 'checkWorkerStatus'));
     }
 
     /**
@@ -30,6 +34,21 @@ class Monitor extends Worker {
         else {
             Core::alert('master is dead');
             Log::write('master is dead');
+        }
+    }
+
+    public function checkWorkerStatus() {
+        if (!$report = $this->getReport()) {
+            Core::alert('no report from master');
+            return false;
+        }
+
+        $max = Config::getInstance()->get($this->_name . '.workers_max_exit', self::DEFAULT_MAX_EXIT);
+        if (is_array($report) && isset($report[Master::REPORT_WORKER_EXIT_UNEXPECTED])) {
+            $count = intval($report[Master::REPORT_WORKER_EXIT_UNEXPECTED]);
+            if ($count >= $max) {
+                Core::alert('too many worker exit');
+            }
         }
     }
 

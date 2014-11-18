@@ -18,10 +18,18 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 class Master {
     const PROTOCAL_UDP = 'udp';
+    const REPORT_WORKER_EXIT_UNEXPECTED = 'workerExitUnexpected';
+    const REPORT_WORKER_REMOVED = 'workerRemoved';
+    const REPORT_WORKER_KILLED = 'workerKilled';
+    const REPORT_START_TIME = 'startTime';
+    const REPORT_WORKER_TOTAL_CREATED = 'workerTotalCreated';
+    const REPORT_SYS_LOAD_AVG = 'sysLoadAvg';
+    const REPORT_MEMORY_USAGE = 'memoryUsage';
+    const MAX_WORKER_EXCEPTION = 10;
     /**
      * @desc limit max workers children
      */
-    const MAX_CHILDREN = 10;
+    const MAX_CHILDREN = self::MAX_WORKER_EXCEPTION;
     /**
      * @desc init state
      */
@@ -101,6 +109,10 @@ class Master {
      * @var array
      */
     private $_report = array();
+    /**
+     * @var int
+     */
+    private static $_workerExit = 0;
 
     /**
      * @desc init env
@@ -117,7 +129,7 @@ class Master {
      */
     public function run() {
         Core::alert('start to run', false);
-        $this->_addReport('startTime', time());
+        $this->_addReport(self::REPORT_START_TIME, time());
         $this->_runningState = self::STATE_START;
         $this->_daemonize();
         $this->_savePid();
@@ -140,8 +152,8 @@ class Master {
             $this->_report[$name] += $count;
         }
 
-        $this->_report['sysLoadAvg'] = sys_getloadavg();
-        $this->_report['memoryUsage'] = memory_get_usage();
+        $this->_report[self::REPORT_SYS_LOAD_AVG] = sys_getloadavg();
+        $this->_report[self::REPORT_MEMORY_USAGE] = memory_get_usage();
 
         return $this;
     }
@@ -298,7 +310,7 @@ class Master {
      */
     private function _addWorker($name, $pid) {
         self::$_workersMap[$pid] = $name;
-        $this->_addReport('workerTotalCreated');
+        $this->_addReport(self::REPORT_WORKER_TOTAL_CREATED);
 
         if (!array_key_exists($name, self::$_workers)) {
             self::$_workers[$name] = array($pid);
@@ -315,9 +327,9 @@ class Master {
         $this->_runningState = self::STATE_RUNNING;
         for (; ;) {
             sleep(1);
+            pcntl_signal_dispatch();
             $this->_checkWorkers();
             $this->_syncReport();
-            pcntl_signal_dispatch();
         }
     }
 
@@ -328,9 +340,13 @@ class Master {
         while (($pid = pcntl_waitpid(-1, $status, WNOHANG | WUNTRACED)) != 0) {
             if (0 != $status) {
                 Core::alert('worker exit code: ' . $status);
+                $this->_addReport(self::REPORT_WORKER_EXIT_UNEXPECTED);
+                self::$_workerExit++;
+                if (self::$_workerExit >= self::MAX_WORKER_EXCEPTION) {
+                    $this->_stop();
+                }
             }
 
-            $this->_addReport('workerExitUnexpected');
             $this->_rmWorker($pid); // remove worker from working list
 
             if ($this->_runningState == self::STATE_SHUTDOWN) {
@@ -361,7 +377,7 @@ class Master {
             return false;
         }
 
-        $this->_addReport('workerRemoved');
+        $this->_addReport(self::REPORT_WORKER_REMOVED);
         unset(self::$_workers[$name][$pid]);
 
         return true;
@@ -466,10 +482,8 @@ class Master {
 
         $workerPids = self::$_workers[$name];
         foreach ($workerPids as $pid => $startTime) {
-            if (!posix_kill($pid, $restart ? SIGHUP : SIGINT)) {
-                throw new Exception('worker pid is invalid');
-            }
-            $this->_addReport('workerKilled');
+            posix_kill($pid, $restart ? SIGHUP : SIGINT);
+            $this->_addReport(self::REPORT_WORKER_KILLED);
         }
 
         Task::add(
