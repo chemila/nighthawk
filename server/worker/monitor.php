@@ -11,11 +11,22 @@ use NHK\System\Log;
 use NHK\System\Process;
 use NHK\system\Task;
 
+/**
+ * Class Monitor
+ *
+ * @package NHK\Server\Worker
+ */
 class Monitor extends Worker {
-    const INTERVAL_MASTER_HEATBEAT = 60;
-    const DEFAULT_MAX_EXIT = 100;
     /**
-     * @var
+     * @desc default check interval
+     */
+    const INTERVAL_MASTER_HEATBEAT = 60;
+    /**
+     * @desc default exit count
+     */
+    const DEFAULT_MAX_EXIT = 10;
+    /**
+     * @var resource
      */
     private $_shm;
 
@@ -42,6 +53,9 @@ class Monitor extends Worker {
         }
     }
 
+    /**
+     * @desc check worker status
+     */
     public function checkWorker() {
         if (!$report = $this->getReport()) {
             return false;
@@ -101,10 +115,8 @@ class Monitor extends Worker {
                 }
                 break;
             case 'help':
-                $this->sendToClient("put: status|quit|report|help\n");
-                break;
             default:
-                $this->sendToClient("see help\n");
+                $this->sendToClient("input: status|quit|report\n");
                 break;
         }
 

@@ -224,8 +224,6 @@ abstract class Worker {
     public function onAccept() {
     }
 
-
-
     /**
      * @param $connection
      * @param $events

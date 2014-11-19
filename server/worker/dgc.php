@@ -5,7 +5,6 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
-use NHK\System\Env;
 use NHK\system\Strategy;
 use NHK\system\Task;
 use NHK\System\Consumer;
@@ -16,15 +15,17 @@ use NHK\System\Consumer;
  * @package NHK\server\worker
  */
 class DGC extends Worker {
+    /**
+     * @desc default batch model count
+     */
     const DEFAULT_BATCH_COUNT = 100;
     /**
      * @var Consumer
      */
     private $_consumer;
     /**
-     * @var Strategy
+     * @var
      */
-    private $_strategy;
     private $_index;
     private $_batchCount;
 
@@ -34,8 +35,8 @@ class DGC extends Worker {
     public function run() {
         // TODO: Implement run() method.
         $this->_prepareConsumer();
-        $this->_strategy = new Strategy($this->_name);
         $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
+        Strategy::loadData($this->_name);
         Task::add('consumeLog', 1, array($this, 'consumeLog'));
     }
 
@@ -67,8 +68,8 @@ class DGC extends Worker {
                 continue;
             }
 
-            if ($name = $this->_strategy->validate($message)) {
-                Core::alert('match strategy: ' . $name, false);
+            if ($id = Strategy::validate($this->_name, $message)) {
+                Core::alert('match strategy: ' . $id, false);
             }
         }
 

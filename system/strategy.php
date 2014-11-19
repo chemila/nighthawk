@@ -8,66 +8,93 @@ namespace NHK\system;
  */
 class Strategy {
     /**
-     * @var
+     * @desc queue key separator
      */
-    protected $_type;
+    const KEY_SEPARATOR = '-';
     /**
      * @var array
      */
-    protected $_data = array();
-    /**
-     * @var array
-     */
-    protected $_result = array();
+    private static $_data = array();
 
-    /**
-     * @param $type
-     * @throws Exception
-     */
-    public function __construct($type) {
-        $this->_type = $type;
-        $this->parseFile();
+    private function __construct() {
     }
 
     /**
-     * @param null $name
+     * @param bool $name
+     * @throws Exception
      * @return array
      */
-    public function getConfig($name = null) {
-        return !empty($name) && array_key_exists($name, $this->_data)
-            ? $this->_data[$name]
-            : $this->_data;
+    public static function loadData($name = false) {
+        if ($name) {
+            if (!isset(self::$_data[$name])) {
+                self::$_data[$name] = self::parseFile($name);
+            }
+
+            return self::$_data[$name];
+        }
+
+        foreach (glob(NHK_PATH_ROOT . 'data/strategy/*.php') as $data) {
+            $name = basename($data, '.php');
+            self::$_data[$name] = self::parseFile($name);
+        }
+
+        return self::$_data;
     }
 
     /**
      * @return mixed
      * @throws Exception
      */
-    protected function parseFile() {
-        $array = include($this->_findFile());
+    public static function parseFile($name) {
+        $array = include(self::findFile($name));
         if (empty($array)) {
             throw new Exception('parse strategy file error');
         }
 
-        return $this->_data = $array;
+        return $array;
     }
 
     /**
-     * @param $content
-     * @return bool|int|string
+     * @param $name
+     * @return string
      * @throws Exception
      */
-    public function validate($content) {
-        foreach ($this->_data as $name => $data) {
-            if (empty($data['pattern'])) {
+    public static function findFile($name) {
+        $path = NHK_PATH_ROOT . 'data/strategy/';
+        $file = $path . $name . '.php';
+        if (!file_exists($file)) {
+            throw new Exception('file not found: ' . $name);
+        }
+
+        return $file;
+    }
+
+    /**
+     * @param null $key
+     * @return array
+     */
+    public static function getConfig($name, $key = null) {
+        return empty($key)
+            ? self::$_data[$name]
+            : self::$_data[$name][$key];
+    }
+
+    /**
+     * @param $name
+     * @param $content
+     * @return bool|string
+     * @throws Exception
+     */
+    public static function validate($name, $content) {
+        $data = self::$_data[$name];
+        foreach ($data as $key => $value) {
+            if (empty($value['pattern'])) {
                 continue;
             }
 
-            $pattern = $data['pattern'];
+            $pattern = $value['pattern'];
             if (preg_match($pattern, $content)) {
-                $this->_collect($name);
-
-                return $name;
+                return self::collect($name, $key);
             }
         }
 
@@ -75,35 +102,36 @@ class Strategy {
     }
 
     /**
+     * @param $name
+     * @param $key
      * @return string
      * @throws Exception
      */
-    private function _findFile() {
-        $path = NHK_PATH_ROOT . 'data/strategy/';
-        $file = $path . $this->_type . '.php';
-        if (!file_exists($file)) {
-            throw new Exception('file not found: ' . $this->_type);
-        }
-
-        return $file;
-    }
-
-    /**
-     * @param $name
-     * @throws Exception
-     */
-    protected function _collect($name) {
+    public static function collect($name, $key) {
         $queue = Env::getInstance()->getMsgQueue();
-        $key = $this->getQueueKey($name);
-        $res = msg_send($queue, Env::MSG_TYPE_EXCEPTION, array($key => time()), true, false, $error);
-
+        $id = self::getQueueId($name, $key);
+        $res = msg_send($queue, Env::MSG_TYPE_EXCEPTION, array($id => time()), true, false, $error);
         if (!$res) {
             throw new Exception('msg send failed: ' . $error);
         }
+
+        return $id;
     }
 
 
-    public function getQueueKey($name) {
-        return crc32($this->_type.$name);
+    /**
+     * @param $name
+     * @return string
+     */
+    public static function getQueueId($name, $key) {
+        return $name . self::KEY_SEPARATOR . $key;
+    }
+
+    /**
+     * @param $key
+     * @return mixed
+     */
+    public static function getSectionName($key) {
+        return explode(self::KEY_SEPARATOR, $key);
     }
 }
