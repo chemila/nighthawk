@@ -50,14 +50,11 @@ class DGC extends Worker {
         // TODO: Implement dealBussiness() method.
         $message = $this->_consumer->get();
         if (empty($message)) {
-            Core::alert('no message receive');
+            return false;
         }
         else {
             if ($name = $this->_strategy->parseContent($message)) {
                 Core::alert('match strategy: ' . $name);
-            }
-            else {
-                Core::alert('no exception', false);
             }
         }
     }

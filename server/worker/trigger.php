@@ -27,7 +27,6 @@ class Trigger extends Worker{
         // TODO: Implement run() method.
         $this->_strategy = new Strategy('dgc');
         Task::add('triggerException', 1, array($this, 'dealBussiness'));
-        Core::alert('test');
     }
 
     /**
@@ -46,7 +45,6 @@ class Trigger extends Worker{
     public function dealBussiness($package) {
         $ret = msg_receive($this->_queue, Env::MSG_TYPE_EXCEPTION, $type, 1024, $message, true, MSG_IPC_NOWAIT, $error);
         if (!$ret) {
-            Core::alert('no msg in queue');
             return false;
         }
 
@@ -64,19 +62,20 @@ class Trigger extends Worker{
                 continue;
             }
 
-            $this->_checkException($key, $limit);
+            $this->_checkException($name, $key, $limit);
         }
 
         return true;
     }
 
     /**
-     * @param     $key
+     * @param string $name
+     * @param string $key
      * @param int $limit
      * @return bool
      * @throws Exception
      */
-    private function _checkException($key, $limit = 10) {
+    private function _checkException($name, $key, $limit = 10) {
         // TODO: get sem lock
         if (shm_has_var($this->_shm, Env::SHM_EXCEPTION)) {
             $string = shm_get_var($this->_shm, Env::SHM_EXCEPTION);
@@ -93,7 +92,7 @@ class Trigger extends Worker{
             }
 
             if ($array[$key] >= $limit) {
-                $this->alert($key);
+                $this->alert($name);
                 unset($array[$key]); // Clear counter
             }
 
@@ -109,6 +108,8 @@ class Trigger extends Worker{
      * @param $name
      */
     public function alert($name) {
-        Core::alert('trigger alert now: ' . $name);
+        $config = $this->_strategy->getConfig($name);
+        $alerts = $config['alerts'];
+        Core::alert('trigger alert now, to: ' . json_encode($alerts));
     }
 }
