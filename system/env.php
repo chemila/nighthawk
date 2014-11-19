@@ -11,7 +11,7 @@ class Env {
     /**
      * @desc shared memory default size
      */
-    const DEFAULT_SHM_SIZE = 65536;
+    const DEFAULT_SHM_SIZE = 655360;
     /**
      * @desc system version
      */
@@ -339,5 +339,12 @@ class Env {
      */
     public function getShm() {
         return shm_attach($this->getIPCKey(), self::DEFAULT_SHM_SIZE);
+    }
+
+    /**
+     * @return resource
+     */
+    public function getSem() {
+        return sem_get($this->getIPCKey(), 1);
     }
 }

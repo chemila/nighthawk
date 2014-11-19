@@ -39,6 +39,10 @@ class Trigger extends Worker {
     /**
      * @var resource
      */
+    private $_sem;
+    /**
+     * @var resource
+     */
     private $_queue;
     /**
      * @var array
@@ -52,6 +56,8 @@ class Trigger extends Worker {
         // TODO: Implement run() method.
         $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
         $this->_shm = Env::getInstance()->getShm();
+        $this->_sem = Env::getInstance()->getSem();
+        shm_remove($this->_shm);
         $this->_queue = Env::getInstance()->getMsgQueue();
         Strategy::loadData();
         Task::add('handleException', 1, array($this, 'handleException'));
@@ -111,10 +117,10 @@ class Trigger extends Worker {
     /**
      * @param string $id
      * @param int    $limit
-     * @return bool
      * @throws Exception
      */
     private function _checkException($id, $limit = 10) {
+        sem_acquire($this->_sem);
         if (shm_has_var($this->_shm, Env::SHM_EXCEPTION)) {
             $string = shm_get_var($this->_shm, Env::SHM_EXCEPTION);
             $array = unserialize($string);
@@ -137,7 +143,8 @@ class Trigger extends Worker {
 
         $this->_addStatistics('shmPutVar');
 
-        return shm_put_var($this->_shm, Env::SHM_EXCEPTION, serialize($array));
+        shm_put_var($this->_shm, Env::SHM_EXCEPTION, serialize($array));
+        sem_release($this->_sem);
     }
 
     /**
@@ -163,7 +170,7 @@ class Trigger extends Worker {
                 $state = msg_stat_queue($this->_queue);
                 $this->sendToClient(json_encode($state) . "\n");
                 break;
-            case 'statistics':
+            case 'summary':
                 $this->sendToClient(json_encode($this->_statistics) . "\n");
                 break;
             case 'quit':
@@ -171,7 +178,7 @@ class Trigger extends Worker {
                 break;
             case 'help':
             default:
-                $this->sendToClient("input: stat|statistics|quit\n");
+                $this->sendToClient("input: stat|summary|quit\n");
                 break;
         }
     }
