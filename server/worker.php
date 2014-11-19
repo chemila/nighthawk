@@ -105,14 +105,6 @@ abstract class Worker {
      * @var int current state
      */
     protected $_runState;
-    /**
-     * @var resource
-     */
-    protected $_shm;
-    /**
-     * @var resource
-     */
-    protected $_queue;
 
     /**
      * @param string   $name
@@ -130,8 +122,6 @@ abstract class Worker {
         $this->_isPersist = Config::getInstance()->get($name . '.persistent_connection', false);
         $this->_eventBase = new Event($this->_name);
         $this->_status = new WorkerStatus();
-        $this->_shm = Env::getInstance()->getShm();
-        $this->_queue = Env::getInstance()->getMsgQueue();
     }
 
     /**
@@ -234,18 +224,7 @@ abstract class Worker {
     public function onAccept() {
     }
 
-    /**
-     * @return bool|mixed
-     */
-    public function getReport() {
-        $shmId = Env::getInstance()->getShm();
 
-        if (shm_has_var($shmId, Env::SHM_REPORT)) {
-            return shm_get_var($shmId, Env::SHM_REPORT);
-        }
-
-        return false;
-    }
 
     /**
      * @param $connection
@@ -303,7 +282,7 @@ abstract class Worker {
         if ($receiveBuffer->isDone()) {
             Core::alert('receive buffer done', false);
             try {
-                $this->dealBussiness($receiveBuffer->content);
+                $this->processRemote($receiveBuffer->content);
                 $this->_status->incre('bussinessDone');
             }
             catch (\Exception $e) {
@@ -409,7 +388,7 @@ abstract class Worker {
      * @param string $package
      * @return bool
      */
-    abstract public function dealBussiness($package);
+    abstract public function processRemote($package);
 
     /**
      *

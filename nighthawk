@@ -45,6 +45,9 @@ switch ($cmd) {
     case 'version':
         NHK\System\Env::getVersion();
         break;
+    case 'kill':
+        \NHK\System\Process::killMaster();
+        break;
     default:
         showUsage();
         break;

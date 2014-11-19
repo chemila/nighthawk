@@ -5,6 +5,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
+use NHK\System\Env;
 use NHK\system\Strategy;
 use NHK\system\Task;
 use NHK\System\Consumer;
@@ -15,6 +16,7 @@ use NHK\System\Consumer;
  * @package NHK\server\worker
  */
 class DGC extends Worker {
+    const DEFAULT_BATCH_COUNT = 100;
     /**
      * @var Consumer
      */
@@ -23,6 +25,8 @@ class DGC extends Worker {
      * @var Strategy
      */
     private $_strategy;
+    private $_index;
+    private $_batchCount;
 
     /**
      * @return mixed
@@ -31,7 +35,8 @@ class DGC extends Worker {
         // TODO: Implement run() method.
         $this->_prepareConsumer();
         $this->_strategy = new Strategy($this->_name);
-        Task::add('consume', 1, array($this, 'dealBussiness'));
+        $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
+        Task::add('consumeLog', 1, array($this, 'consumeLog'));
     }
 
     /**
@@ -43,20 +48,39 @@ class DGC extends Worker {
     }
 
     /**
+     * @return bool
+     */
+    public function consumeLog() {
+        $this->_index = 0;
+
+        while (true) {
+            // TODO: Implement dealBussiness() method.
+            $message = $this->_consumer->get();
+
+            $this->_index++;
+            if ($this->_index >= $this->_batchCount) {
+                $this->_index = 0;
+                break;
+            }
+
+            if (empty($message)) {
+                continue;
+            }
+
+            if ($name = $this->_strategy->validate($message)) {
+                Core::alert('match strategy: ' . $name, false);
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * @param string $package
      * @return bool
      */
-    public function dealBussiness($package) {
-        // TODO: Implement dealBussiness() method.
-        $message = $this->_consumer->get();
-        if (empty($message)) {
-            return false;
-        }
-        else {
-            if ($name = $this->_strategy->parseContent($message)) {
-                Core::alert('match strategy: ' . $name);
-            }
-        }
+    public function processRemote($package) {
+        // TODO: Implement processRemote() method.
     }
 
     /**

@@ -6,6 +6,7 @@ use NHK\Server\Master;
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
+use NHK\System\Env;
 use NHK\System\Log;
 use NHK\System\Process;
 use NHK\system\Task;
@@ -13,13 +14,18 @@ use NHK\system\Task;
 class Monitor extends Worker {
     const INTERVAL_MASTER_HEATBEAT = 60;
     const DEFAULT_MAX_EXIT = 100;
+    /**
+     * @var
+     */
+    private $_shm;
 
     /**
      * @desc main job goes here
      */
     public function run() {
-        Task::add('heatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
-        Task::add('checkWorker', 10, array($this, 'checkWorkerStatus'));
+        $this->_shm = Env::getInstance()->getShm();
+        Task::add('checkHeatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
+        Task::add('checkWorker', 10, array($this, 'checkWorker'));
     }
 
     /**
@@ -36,9 +42,8 @@ class Monitor extends Worker {
         }
     }
 
-    public function checkWorkerStatus() {
+    public function checkWorker() {
         if (!$report = $this->getReport()) {
-            Core::alert('no report from master');
             return false;
         }
 
@@ -49,6 +54,17 @@ class Monitor extends Worker {
                 Core::alert('too many worker exit');
             }
         }
+    }
+
+    /**
+     * @return bool|mixed
+     */
+    public function getReport() {
+        if (shm_has_var($this->_shm, Env::SHM_REPORT)) {
+            return shm_get_var($this->_shm, Env::SHM_REPORT);
+        }
+
+        return false;
     }
 
     /**
@@ -64,7 +80,7 @@ class Monitor extends Worker {
      * @param string $package
      * @return bool
      */
-    public function dealBussiness($package) {
+    public function processRemote($package) {
         // TODO: Implement dealBussiness() method.
         $content = trim($package);
 
@@ -84,8 +100,11 @@ class Monitor extends Worker {
                     $this->sendToClient("get report failed\n");
                 }
                 break;
+            case 'help':
+                $this->sendToClient("put: status|quit|report|help\n");
+                break;
             default:
-                $this->sendToClient(sprintf("hey u, got it: %s\n", $content));
+                $this->sendToClient("see help\n");
                 break;
         }
 

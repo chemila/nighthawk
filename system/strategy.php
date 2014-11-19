@@ -57,7 +57,7 @@ class Strategy {
      * @return bool|int|string
      * @throws Exception
      */
-    public function parseContent($content) {
+    public function validate($content) {
         foreach ($this->_data as $name => $data) {
             if (empty($data['pattern'])) {
                 continue;

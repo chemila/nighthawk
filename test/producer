@@ -1,4 +1,6 @@
+#!/usr/bin/env php
 <?php
+$count = isset($argv[1]) ? intval($argv[1]) : 5;
 //配置信息
 $config = array(
     'host' => 'localhost',
@@ -24,8 +26,9 @@ $ex->setName($exname);
 //消息内容
 $message = "TEST MESSAGE! 测试消息！";
 //发送消息
-for ($i = 0; $i < 5; ++$i) {
+for ($i = 0; $i < $count; ++$i) {
     echo "Send Message:" . $ex->publish($message, $route) . "\n";
+//    sleep(1);
 }
 
 //$data = array(

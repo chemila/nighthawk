@@ -352,8 +352,8 @@ class Master {
             if ($this->_runningState == self::STATE_SHUTDOWN) {
                 if (!$this->_hasWorker()) {
                     $this->_clearWorker($pid);
+                    Process::killMaster();
                     Core::alert('master is shutdown');
-                    exit(0);
                 }
             }
             else {
@@ -406,7 +406,7 @@ class Master {
      */
     private function _clearWorker($pid) {
         if (is_resource($this->_shm)) {
-            shm_remove($this->_shm);
+            shm_detach($this->_shm);
         }
 
         if (is_resource($this->_msg)) {

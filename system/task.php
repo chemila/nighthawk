@@ -50,7 +50,7 @@ class Task {
      * @param      $callback
      * @param null $startTime
      * @param bool $persist
-     * @return $this
+     * @return bool
      */
     public static function add($name, $interval, $callback, $startTime = null, $persist = true, $args = array()) {
         $taskEntity = new TaskEntity($name, $interval, $callback, $startTime, $persist, $args);

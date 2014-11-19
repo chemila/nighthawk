@@ -61,9 +61,9 @@ class Process {
      * @return bool
      */
     public static function killMaster() {
-        Core::alert('force to kill master');
         $pid = self::checkProcess();
         if ($pid <= 0) {
+            Core::alert('master pid file not exist');
             return false;
         }
 
@@ -71,6 +71,9 @@ class Process {
             Core::alert('kill master failed');
 
             return false;
+        }
+        else {
+            Core::alert('force to kill master');
         }
 
         return unlink(Env::getInstance()->getPIDFile());

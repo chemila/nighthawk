@@ -30,7 +30,7 @@ class Env {
     const MSG_TYPE_EXCEPTION = 4;
 
     const SHM_REPORT = 1;
-    const SHM_EXCEPTION = 2;
+    const SHM_EXCEPTION = 4;
     /**
      * @var array
      */
