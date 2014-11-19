@@ -105,6 +105,14 @@ abstract class Worker {
      * @var int current state
      */
     protected $_runState;
+    /**
+     * @var resource
+     */
+    protected $_shm;
+    /**
+     * @var resource
+     */
+    protected $_queue;
 
     /**
      * @param string   $name
@@ -122,6 +130,8 @@ abstract class Worker {
         $this->_isPersist = Config::getInstance()->get($name . '.persistent_connection', false);
         $this->_eventBase = new Event($this->_name);
         $this->_status = new WorkerStatus();
+        $this->_shm = Env::getInstance()->getShm();
+        $this->_queue = Env::getInstance()->getMsgQueue();
     }
 
     /**

@@ -5,12 +5,15 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
-use NHK\System\Env;
-use NHK\System\Exception;
 use NHK\system\Strategy;
 use NHK\system\Task;
-use NHK\Vendor\rabbitmq\Consumer;
+use NHK\System\Consumer;
 
+/**
+ * Class DGC
+ *
+ * @package NHK\server\worker
+ */
 class DGC extends Worker {
     /**
      * @var Consumer
@@ -28,7 +31,7 @@ class DGC extends Worker {
         // TODO: Implement run() method.
         $this->_prepareConsumer();
         $this->_strategy = new Strategy($this->_name);
-        Task::add('consume', 3, array($this, 'dealBussiness'));
+        Task::add('consume', 1, array($this, 'dealBussiness'));
     }
 
     /**
@@ -50,13 +53,18 @@ class DGC extends Worker {
             Core::alert('no message receive');
         }
         else {
-            Core::alert('got: ' . $message, false);
-            if ($this->_strategy->parse($message)) {
-                $this->_incException($this->_strategy->getName(), $this->_strategy->getFrequency());
+            if ($name = $this->_strategy->parseContent($message)) {
+                Core::alert('match strategy: ' . $name);
+            }
+            else {
+                Core::alert('no exception', false);
             }
         }
     }
 
+    /**
+     * init consumer connection
+     */
     private function _prepareConsumer() {
         $config = Config::getInstance()->get($this->_name);
         $consumerConfig = array(
@@ -83,29 +91,5 @@ class DGC extends Worker {
             Core::alert($e->getMessage());
             exit(1);
         }
-    }
-
-    private function _incException($count = 1) {
-        $shm = Env::getInstance()->getShm();
-        $data = array();
-        $name = $this->_strategy->getName();
-        if (shm_has_var($shm, Env::SHM_EXCEPTION_DGC)) {
-            $data = shm_get_var($shm, Env::SHM_EXCEPTION_DGC);
-            if (array_key_exists($name, $data)) {
-                $data[$name][0] += $count;
-            }
-            else {
-                $data[$name][0] = $count;
-                $data[$name][1] = time();
-            }
-        }
-        else {
-            $data[$name][0] = $count;
-            $data[$name][1] = time();
-        }
-
-        $data[$name][2] = $this->_strategy->getFrequency();
-        $data[$name][3] = $this->_strategy->getUsers();
-        return shm_put_var($shm, Env::SHM_EXCEPTION_DGC, $data);
     }
 }

@@ -5,15 +5,29 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Core;
 use NHK\System\Env;
+use NHK\System\Exception;
+use NHK\system\Strategy;
 use NHK\system\Task;
 
+/**
+ * Class Trigger
+ *
+ * @package NHK\Server\Worker
+ */
 class Trigger extends Worker{
+    /**
+     * @var Strategy
+     */
+    private $_strategy;
+
     /**
      * @return mixed
      */
     public function run() {
         // TODO: Implement run() method.
-        Task::add('getException', 1, array($this, 'dealBussiness'));
+        $this->_strategy = new Strategy('dgc');
+        Task::add('triggerException', 1, array($this, 'dealBussiness'));
+        Core::alert('test');
     }
 
     /**
@@ -22,6 +36,7 @@ class Trigger extends Worker{
      */
     public function parseInput($buff) {
         // TODO: Implement parseInput() method.
+        return 0;
     }
 
     /**
@@ -29,30 +44,71 @@ class Trigger extends Worker{
      * @return bool
      */
     public function dealBussiness($package) {
-        // TODO: Implement dealBussiness() method.
-        $this->_getException();
-    }
-
-    private function _getException() {
-        $shm = Env::getInstance()->getShm();
-        $array = shm_get_var($shm, Env::SHM_EXCEPTION_DGC);
-        if (empty($array)) {
+        $ret = msg_receive($this->_queue, Env::MSG_TYPE_EXCEPTION, $type, 1024, $message, true, MSG_IPC_NOWAIT, $error);
+        if (!$ret) {
+            Core::alert('no msg in queue');
             return false;
         }
-        foreach ($array as $name => $value) {
-            var_dump($value);
-            $count = $value[0];
-            $time = $value[1];
-            $freq = $value[2];
-            $users = $value[3];
 
-            if (time() - $time >= $freq[1] && $count > $freq[0]) {
-                Core::alert('trigger exception now');
-                shm_remove_var($shm, Env::SHM_EXCEPTION_DGC);
+        $config = $this->_strategy->getConfig();
+        foreach ($config as $name => $value) {
+            $key = $this->_strategy->getQueueKey($name);
+            if (!array_key_exists($key, $message)) {
+                continue;
+            }
+
+            list($limit, $interval) = $value['frequency'];
+            $time = $message[$key];
+            if (time() - $time > $interval) {
+                // Ignored this msg, expired!!!
+                continue;
+            }
+
+            $this->_checkException($key, $limit);
+        }
+
+        return true;
+    }
+
+    /**
+     * @param     $key
+     * @param int $limit
+     * @return bool
+     * @throws Exception
+     */
+    private function _checkException($key, $limit = 10) {
+        // TODO: get sem lock
+        if (shm_has_var($this->_shm, Env::SHM_EXCEPTION)) {
+            $string = shm_get_var($this->_shm, Env::SHM_EXCEPTION);
+            $array = unserialize($string);
+            if (!is_array($array)) {
+                throw new Exception('invalid shm exception data');
+            }
+
+            if (array_key_exists($key, $array)) {
+                $array[$key] += 1;
             }
             else {
-                Core::alert('no trigger');
+                $array[$key] = 1;
             }
+
+            if ($array[$key] >= $limit) {
+                $this->alert($key);
+                unset($array[$key]); // Clear counter
+            }
+
         }
+        else {
+            $array = array($key => 1);
+        }
+
+        return shm_put_var($this->_shm, Env::SHM_EXCEPTION, serialize($array));
     }
-} 
+
+    /**
+     * @param $name
+     */
+    public function alert($name) {
+        Core::alert('trigger alert now: ' . $name);
+    }
+}
