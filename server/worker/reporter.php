@@ -1,5 +1,6 @@
 <?php
 namespace NHK\server\worker;
+require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
 
 use NHK\Server\Worker;
 use NHK\System\Config;
@@ -45,7 +46,7 @@ class Reporter extends Worker {
      */
     private $_history = array();
     /**
-     * @var Email
+     * @var \PHPMailer
      */
     private $_email;
     /**
@@ -59,7 +60,9 @@ class Reporter extends Worker {
     public function run() {
         $this->_queue = Env::getInstance()->getMsgQueue();
         $this->_batchCount = Config::getInstance()->get($this->_name, '.batch_count', 10);
-        $this->_email = new Email();
+        $this->_email = new \PHPMailer();
+        $this->_email->isSendmail();
+        $this->_email->setFrom('chemia@me.com', 'fuqiang');
         $this->_sms = new Sms();
         Strategy::loadData();
         Task::add('sendReport', 1, array($this, 'sendReport'));
@@ -106,24 +109,26 @@ class Reporter extends Worker {
      * @param $id
      */
     private function _alertUsers($id) {
+        require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
-        $phones = $emails = array();
+        $this->_email->Subject = $config['desc'];
+        $this->_email->Body = sprintf("This is a alert test, id: " . $id);
+
         foreach ($users as $user) {
             if (preg_match('/\d{11}/', $user)) {
-                $phones[] = $user;
+                $this->_sms->send($config['desc']);
             }
             else {
-                $emails[] = $user;
+                $this->_email->addAddress($user);
             }
         }
 
-        if (!empty($phones)) {
-            $this->_sms->send($config['desc']);
+        if (!$this->_email->send()) {
+            Core::alert('send mail error: ' . $this->_email->ErrorInfo);
         }
-
-        if (!empty($emails)) {
-            $this->_email->send($config['desc']);
+        else {
+            Core::alert('send mail success', false);
         }
     }
 
