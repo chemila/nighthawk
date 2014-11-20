@@ -119,7 +119,7 @@ abstract class Worker {
         socket_set_blocking($socket, 0);
         $this->_socket = $socket;
         $this->_protocal = substr($socketStat['stream_type'], 0, 3);
-        $this->_isPersist = Config::getInstance()->get($name . '.persistent_connection', false);
+        $this->_isPersist = Config::getInstance()->get($name . '.persist', false);
         $this->_eventBase = new Event($this->_name);
         $this->_status = new WorkerStatus();
     }
@@ -280,7 +280,7 @@ abstract class Worker {
         if ($receiveBuffer->isDone()) {
             Core::alert('receive buffer done', false);
             try {
-                $this->processRemote($receiveBuffer->content);
+                $this->serve($receiveBuffer->content);
                 $this->_status->incre('bussinessDone');
             }
             catch (\Exception $e) {
@@ -288,7 +288,6 @@ abstract class Worker {
             }
 
             if ($this->_isPersist) {
-                Core::alert('persist connection reset', false);
                 $receiveBuffer->reset();
                 $this->_bufferRecv[$current] = $receiveBuffer;
 
@@ -386,7 +385,7 @@ abstract class Worker {
      * @param string $package
      * @return bool
      */
-    abstract public function processRemote($package);
+    abstract public function serve($package);
 
     /**
      *

@@ -104,7 +104,7 @@ class Master {
     /**
      * @var int
      */
-    private $_runningState = self::STATE_START;
+    private $_runState = self::STATE_START;
     /**
      * @var array
      */
@@ -130,7 +130,7 @@ class Master {
     public function run() {
         Core::alert('start to run master', false);
         $this->_addReport(self::REPORT_START_TIME, time());
-        $this->_runningState = self::STATE_START;
+        $this->_runState = self::STATE_START;
         $this->_daemonize();
         $this->_savePid();
         $this->_installSignal();
@@ -324,7 +324,7 @@ class Master {
      * @desc loop signal
      */
     private function _loop() {
-        $this->_runningState = self::STATE_RUNNING;
+        $this->_runState = self::STATE_RUNNING;
         for (; ;) {
             sleep(1);
             pcntl_signal_dispatch();
@@ -349,7 +349,7 @@ class Master {
 
             $this->_rmWorker($pid); // remove worker from working list
 
-            if ($this->_runningState == self::STATE_SHUTDOWN) {
+            if ($this->_runState == self::STATE_SHUTDOWN) {
                 if (!$this->_hasWorker()) {
                     $this->_clearWorker($pid);
                     Process::killMaster();
@@ -420,7 +420,7 @@ class Master {
     private function _syncReport() {
         $this->_report['workers'] = self::$_workers;
 
-        return shm_put_var($this->_shm, Env::SHM_REPORT, $this->_report);
+        return shm_put_var($this->_shm, Env::SHM_STATUS, $this->_report);
     }
 
     /**
@@ -448,11 +448,11 @@ class Master {
      * @desc restart workers, kill -1|-9
      */
     private function _restartWorkers() {
-        if ($this->_runningState == self::STATE_SHUTDOWN) {
+        if ($this->_runState == self::STATE_SHUTDOWN) {
             return false;
         }
 
-        $this->_runningState = self::STATE_RESTART;
+        $this->_runState = self::STATE_RESTART;
         if (empty(self::$_workers)) {
             return false;
         }
@@ -461,7 +461,7 @@ class Master {
             $this->_killWorker($name, true);
         }
 
-        $this->_runningState = self::STATE_RUNNING;
+        $this->_runState = self::STATE_RUNNING;
 
         return true;
     }
@@ -505,7 +505,7 @@ class Master {
             exit(0);
         }
 
-        $this->_runningState = self::STATE_SHUTDOWN;
+        $this->_runState = self::STATE_SHUTDOWN;
 
         foreach (self::$_workers as $workerName => $pids) {
             $this->_killWorker($workerName);

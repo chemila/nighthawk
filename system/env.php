@@ -27,10 +27,11 @@ class Env {
 
     const MSG_TYPE_STATUS = 1;
     const MSG_TYPE_FILES = 2;
-    const MSG_TYPE_EXCEPTION = 4;
+    const MSG_TYPE_TRIGGER = 4;
+    const MSG_TYPE_ALERT = 8;
 
-    const SHM_REPORT = 1;
-    const SHM_EXCEPTION = 4;
+    const SHM_STATUS = 1;
+    const SHM_TRIGGER = 2;
     /**
      * @var array
      */

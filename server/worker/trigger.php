@@ -80,12 +80,11 @@ class Trigger extends Worker {
         $start = time();
         while (true) {
             $ret = msg_receive(
-                $this->_queue, Env::MSG_TYPE_EXCEPTION, $name, 1024, $message, true, MSG_IPC_NOWAIT, $error
+                $this->_queue, Env::MSG_TYPE_TRIGGER, $name, 1024, $message, true, MSG_IPC_NOWAIT, $error
             );
 
             $this->_index++;
             if ($this->_index >= $this->_batchCount) {
-                $this->_index = 0;
                 break;
             }
 
@@ -115,14 +114,27 @@ class Trigger extends Worker {
     }
 
     /**
+     * @param     $name
+     * @param int $count
+     */
+    private function _addStatistics($name, $count = 1) {
+        if (isset($this->_statistics[$name])) {
+            $this->_statistics[$name] += $count;
+        }
+        else {
+            $this->_statistics[$name] = $count;
+        }
+    }
+
+    /**
      * @param string $id
      * @param int    $limit
      * @throws Exception
      */
     private function _checkException($id, $limit = 10) {
         sem_acquire($this->_sem);
-        if (shm_has_var($this->_shm, Env::SHM_EXCEPTION)) {
-            $string = shm_get_var($this->_shm, Env::SHM_EXCEPTION);
+        if (shm_has_var($this->_shm, Env::SHM_TRIGGER)) {
+            $string = shm_get_var($this->_shm, Env::SHM_TRIGGER);
             $array = unserialize($string);
             if (array_key_exists($id, $array)) {
                 $array[$id] += 1;
@@ -143,7 +155,7 @@ class Trigger extends Worker {
 
         $this->_addStatistics('shmPutVar');
 
-        shm_put_var($this->_shm, Env::SHM_EXCEPTION, serialize($array));
+        shm_put_var($this->_shm, Env::SHM_TRIGGER, serialize($array));
         sem_release($this->_sem);
     }
 
@@ -152,18 +164,16 @@ class Trigger extends Worker {
      */
     public function alert($id) {
         $this->_addStatistics('totalAlerts');
-        list($name, $key) = Strategy::getSectionName($id);
-        $config = Strategy::getConfig($name, $key);
-        $alerts = $config['alerts'];
-        //TODO: send email|sms
-        Core::alert('trigger alert now, to: ' . json_encode($alerts));
+        $message = array($id => time());
+        msg_send($this->_queue, Env::MSG_TYPE_ALERT, $message, true, false, $error);
+        Core::alert('trigger alert: ' . $id);
     }
 
     /**
      * @param string $package
      * @return bool
      */
-    public function processRemote($package) {
+    public function serve($package) {
         $package = trim($package);
         switch ($package) {
             case 'stat':
@@ -180,19 +190,6 @@ class Trigger extends Worker {
             default:
                 $this->sendToClient("input: stat|summary|quit\n");
                 break;
-        }
-    }
-
-    /**
-     * @param     $name
-     * @param int $count
-     */
-    private function _addStatistics($name, $count = 1) {
-        if (isset($this->_statistics[$name])) {
-            $this->_statistics[$name] += $count;
-        }
-        else {
-            $this->_statistics[$name] = $count;
         }
     }
 }

@@ -17,6 +17,7 @@ use NHK\system\Task;
  * @package NHK\Server\Worker
  */
 class Monitor extends Worker {
+    const INTERVAL_STATUS = 20;
     /**
      * @desc default check interval
      */
@@ -36,7 +37,7 @@ class Monitor extends Worker {
     public function run() {
         $this->_shm = Env::getInstance()->getShm();
         Task::add('checkHeatBeat', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkHeatBeat'));
-        Task::add('checkWorker', 10, array($this, 'checkWorker'));
+        Task::add('checkWorker', self::INTERVAL_STATUS, array($this, 'checkWorker'));
     }
 
     /**
@@ -74,8 +75,8 @@ class Monitor extends Worker {
      * @return bool|mixed
      */
     public function getReport() {
-        if (shm_has_var($this->_shm, Env::SHM_REPORT)) {
-            return shm_get_var($this->_shm, Env::SHM_REPORT);
+        if (shm_has_var($this->_shm, Env::SHM_STATUS)) {
+            return shm_get_var($this->_shm, Env::SHM_STATUS);
         }
 
         return false;
@@ -94,7 +95,7 @@ class Monitor extends Worker {
      * @param string $package
      * @return bool
      */
-    public function processRemote($package) {
+    public function serve($package) {
         // TODO: Implement dealBussiness() method.
         $content = trim($package);
 

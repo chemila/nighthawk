@@ -94,7 +94,7 @@ class Strategy {
 
             $pattern = $value['pattern'];
             if (preg_match($pattern, $content)) {
-                return self::collect($name, $key);
+                return $key;
             }
         }
 
@@ -105,33 +105,29 @@ class Strategy {
      * @param $name
      * @param $key
      * @return string
-     * @throws Exception
-     */
-    public static function collect($name, $key) {
-        $queue = Env::getInstance()->getMsgQueue();
-        $id = self::getQueueId($name, $key);
-        $res = msg_send($queue, Env::MSG_TYPE_EXCEPTION, array($id => time()), true, false, $error);
-        if (!$res) {
-            throw new Exception('msg send failed: ' . $error);
-        }
-
-        return $id;
-    }
-
-
-    /**
-     * @param $name
-     * @return string
      */
     public static function getQueueId($name, $key) {
         return $name . self::KEY_SEPARATOR . $key;
     }
 
     /**
-     * @param $key
+     * @param $id
      * @return mixed
      */
-    public static function getSectionName($key) {
-        return explode(self::KEY_SEPARATOR, $key);
+    public static function getSectionName($id) {
+        return explode(self::KEY_SEPARATOR, $id);
+    }
+
+    /**
+     * @param $id
+     * @return array
+     */
+    public static function getConfigById($id) {
+        list($name, $key) = self::getSectionName($id);
+        if (!isset(self::$_data[$name])) {
+            self::loadData($name);
+        }
+
+        return self::getConfig($name, $key);
     }
 }

@@ -5,6 +5,8 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
+use NHK\System\Env;
+use NHK\System\Exception;
 use NHK\system\Strategy;
 use NHK\system\Task;
 use NHK\System\Consumer;
@@ -27,7 +29,14 @@ class DGC extends Worker {
      * @var
      */
     private $_index;
+    /**
+     * @var
+     */
     private $_batchCount;
+    /**
+     * @var
+     */
+    private $_queue;
 
     /**
      * @return mixed
@@ -35,6 +44,7 @@ class DGC extends Worker {
     public function run() {
         // TODO: Implement run() method.
         $this->_prepareConsumer();
+        $this->_queue = Env::getInstance()->getMsgQueue();
         $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
         Strategy::loadData($this->_name);
         Task::add('consumeLog', 1, array($this, 'consumeLog'));
@@ -60,7 +70,6 @@ class DGC extends Worker {
 
             $this->_index++;
             if ($this->_index >= $this->_batchCount) {
-                $this->_index = 0;
                 break;
             }
 
@@ -68,9 +77,26 @@ class DGC extends Worker {
                 continue;
             }
 
-            if ($id = Strategy::validate($this->_name, $message)) {
-                Core::alert('match strategy: ' . $id, false);
+            if ($key = Strategy::validate($this->_name, $message)) {
+                $this->_collect($key);
             }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param string $key
+     * @return bool
+     * @throws Exception
+     */
+    private function _collect($key) {
+        $id = Strategy::getQueueId($this->_name, $key);
+        Core::alert('match strategy: ' . $id);
+
+        $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, array($id => time()), true, false, $error);
+        if (!$res) {
+            throw new Exception('send msg queue failed: ' . $error);
         }
 
         return true;
@@ -80,7 +106,7 @@ class DGC extends Worker {
      * @param string $package
      * @return bool
      */
-    public function processRemote($package) {
+    public function serve($package) {
         // TODO: Implement processRemote() method.
     }
 
