@@ -92,7 +92,7 @@ class DGC extends Worker {
      */
     private function _collect($key) {
         $id = Strategy::getQueueId($this->_name, $key);
-        Core::alert('match strategy: ' . $id);
+        //Core::alert('match strategy: ' . $id);
 
         $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, array($id => time()), true, false, $error);
         if (!$res) {

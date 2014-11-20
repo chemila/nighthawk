@@ -11,6 +11,6 @@ class Sms {
     }
 
     public function send($content) {
-        Core::alert($content);
+        Core::alert(__CLASS__ . $content);
     }
 } 
