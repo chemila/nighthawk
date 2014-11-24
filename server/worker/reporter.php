@@ -1,5 +1,7 @@
 <?php
 namespace NHK\server\worker;
+
+defined('NHK_PATH_ROOT') or die('No direct script access.');
 require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
 require_once NHK_PATH_ROOT . 'vendor/mongate.php';
 
@@ -102,14 +104,15 @@ class Reporter extends Worker {
             $this->_history[$id] = time();
             //TODO: invoke email|sms sender
             Core::alert('send email|sms for: ' . $id);
-            $this->_alertUsers($id);
+            $this->_alertUsers($id, $time);
         }
     }
 
     /**
-     * @param $id
+     * @param string $id
+     * @param int    $alertAt
      */
-    private function _alertUsers($id) {
+    private function _alertUsers($id, $alertAt) {
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
         $smsTo = $mailsTo = array();
@@ -124,21 +127,32 @@ class Reporter extends Worker {
             }
         }
 
+        $data = array(
+            '{time}' => date('Y-m-d H:i:s', $alertAt),
+            '{desc}' => $config['desc'],
+            '{id}' => $id,
+            '{content}' => 'test',
+        );
+
         if (!empty($mailsTo)) {
             $this->_email->Subject = $config['desc'];
-            $this->_email->Body = sprintf("This is a alert test, id: " . $id);
+            $this->_email->Body = $this->_genMailContent($data);
 
-            if (!$this->_email->send()) {
-                Log::write('send mail error: ' . $this->_email->ErrorInfo);
+            if ($this->_email->send()) {
+                Core::alert('send mail success', false);
             }
             else {
-                Core::alert('send mail success', false);
+                Log::write('send mail error: ' . $this->_email->ErrorInfo);
             }
         }
 
         if (!empty($smsTo)) {
-            Core::alert('send sms to users: ' . implode(';', $smsTo));
-            $this->_sms->sendSms($smsTo, 'test');
+            if ($this->_sms->sendSms($smsTo, $this->_genSmsContent($data))) {
+                Core::alert('send sms to users: ' . implode(';', $smsTo));
+            }
+            else {
+                Log::write('send sms error: ' . $this->_sms->getLastError());
+            }
         }
     }
 
@@ -156,5 +170,25 @@ class Reporter extends Worker {
      */
     public function serve($package) {
         // TODO: Implement processRemote() method.
+    }
+
+    /**
+     * @param array $data
+     * @return string
+     */
+    private function _genSmsContent(array $data) {
+        $template = Config::getInstance()->get($this->_name . '.sms_mongate.template');
+
+        return strtr($template, $data);
+    }
+
+    /**
+     * @param array $data
+     * @return string
+     */
+    private function _genMailContent(array $data) {
+        $template = Config::getInstance()->get($this->_name . '.sms_mongate.template');
+
+        return strtr($template, $data);
     }
 }

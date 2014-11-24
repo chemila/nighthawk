@@ -1,15 +1,50 @@
 <?php
 require_once('nusoap.php');
 
+/**
+ * Class Mongate
+ */
 class Mongate {
-
+    /**
+     * @var
+     */
     private $_gateway;
+    /**
+     * @var
+     */
     private $_username;
+    /**
+     * @var
+     */
     private $_password;
+    /**
+     * @var nusoap_client
+     */
     private $_soap;
+    /**
+     * @var string
+     */
     private $_port;
-    public static $msg
+    /**
+     * @var string
+     */
+    private $_lastError;
+    /**
+     * @var array
+     */
+    public static $error
         = [
+            '-1' => '参数为空',
+            '-2' => '电话号码个数超过100',
+            '-10' => '申请缓存空间失败',
+            '-11' => '电话号码中有非数字字符',
+            '-12' => '有异常电话号码',
+            '-13' => '电话号码个数与实际个数不相等',
+            '-14' => '实际号码个数超过100',
+            '-101' => '发送消息等待超时',
+            '-102' => '发送或接收消息失败',
+            '-103' => '接收消息超时',
+            '-200' => '其他错误',
             '-999' => '服务器内部错误',
             '-10001' => '用户登陆不成功(帐号不存在/停用/密码错误)',
             '-10002' => '提交格式不正确',
@@ -45,33 +80,21 @@ class Mongate {
             '-10033' => '非法关键词',
         ];
 
-    public static $error
-        = [
-            '-1' => '参数为空',
-            '-2' => '电话号码个数超过100',
-            '-10' => '申请缓存空间失败',
-            '-11' => '电话号码中有非数字字符',
-            '-12' => '有异常电话号码',
-            '-13' => '电话号码个数与实际个数不相等',
-            '-14' => '实际号码个数超过100',
-            '-101' => '发送消息等待超时',
-            '-102' => '发送或接收消息失败',
-            '-103' => '接收消息超时',
-            '-200' => '其他错误',
-            '-999' => 'web服务器内部错误',
-        ];
-
+    /**
+     * @param array $config
+     */
     public function __construct($config) {
         $this->_gateway = $config['gateway'];
         $this->_username = $config['username'];
         $this->_password = $config['password'];
-        $this->_port = '*';
+        $this->_port = $config['port'];
         $this->_soap = new nusoap_client($this->_gateway, false);
     }
 
-    /*
-     *  短信息发送接口（相同内容群发）
-     *  return 信息编号 如：-8485643440204283743或1485643440204283743
+    /**
+     * @param array  $mobiles
+     * @param string $content
+     * @return mixed
      */
     public function sendSms(array $mobiles, $content) {
         $params = array();
@@ -84,6 +107,21 @@ class Mongate {
         $params['pszMsg'] = $content;
         $params['iMobiCount'] = $total;
 
-        return $this->_soap->call('MongateCsSpSendSmsNew', $params);
+        $res = $this->_soap->call('MongateCsSpSendSmsNew', $params);
+        if (in_array($res, self::$error)) {
+            $this->_lastError = self::$error[$res];
+
+            return false;
+        }
+        else {
+            return true;
+        }
+    }
+
+    /**
+     * @return string
+     */
+    public function getLastError() {
+        return $this->_lastError;
     }
 }
