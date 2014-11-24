@@ -1,13 +1,13 @@
 <?php
 namespace NHK\server\worker;
 require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
+require_once NHK_PATH_ROOT . 'vendor/mongate.php';
 
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
 use NHK\System\Env;
 use NHK\System\Log;
-use NHK\system\Sms;
 use NHK\system\Strategy;
 use NHK\system\Task;
 
@@ -46,7 +46,7 @@ class Reporter extends Worker {
      */
     private $_email;
     /**
-     * @var Sms
+     * @var \Mongate
      */
     private $_sms;
 
@@ -57,9 +57,12 @@ class Reporter extends Worker {
         $this->_queue = Env::getInstance()->getMsgQueue();
         $this->_batchCount = Config::getInstance()->get($this->_name, '.batch_count', 10);
         $this->_email = new \PHPMailer();
-        $this->_email->isSendmail();
-        $this->_email->setFrom('chemia@me.com', 'fuqiang');
-        $this->_sms = new Sms();
+        $emails = Config::getInstance()->get($this->_name . '.email');
+        if ($emails['sendmail']) {
+            $this->_email->isSendmail();
+        }
+        $this->_email->setFrom($emails['from'], $emails['name']);
+        $this->_sms = new \Mongate(Config::getInstance()->get($this->_name . '.sms_mongate'));
         Strategy::loadData();
         Task::add('sendReport', 1, array($this, 'sendReport'));
     }
@@ -109,23 +112,33 @@ class Reporter extends Worker {
     private function _alertUsers($id) {
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
-        $this->_email->Subject = $config['desc'];
-        $this->_email->Body = sprintf("This is a alert test, id: " . $id);
+        $smsTo = $mailsTo = array();
 
         foreach ($users as $user) {
             if (preg_match('/\d{11}/', $user)) {
-                $this->_sms->send($config['desc']);
+                $smsTo[] = $user;
             }
             else {
                 $this->_email->addAddress($user);
+                $mailsTo[] = $user;
             }
         }
 
-        if (!$this->_email->send()) {
-            Log::write('send mail error: ' . $this->_email->ErrorInfo);
+        if (!empty($mailsTo)) {
+            $this->_email->Subject = $config['desc'];
+            $this->_email->Body = sprintf("This is a alert test, id: " . $id);
+
+            if (!$this->_email->send()) {
+                Log::write('send mail error: ' . $this->_email->ErrorInfo);
+            }
+            else {
+                Core::alert('send mail success', false);
+            }
         }
-        else {
-            Core::alert('send mail success', false);
+
+        if (!empty($smsTo)) {
+            Core::alert('send sms to users: ' . implode(';', $smsTo));
+            $this->_sms->sendSms($smsTo, 'test');
         }
     }
 
@@ -143,9 +156,5 @@ class Reporter extends Worker {
      */
     public function serve($package) {
         // TODO: Implement processRemote() method.
-    }
-
-    private function _sendMail($to, $title, $content) {
-
     }
 }
