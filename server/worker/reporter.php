@@ -5,8 +5,8 @@ require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
 use NHK\Server\Worker;
 use NHK\System\Config;
 use NHK\System\Core;
-use NHK\system\Email;
 use NHK\System\Env;
+use NHK\System\Log;
 use NHK\system\Sms;
 use NHK\system\Strategy;
 use NHK\system\Task;
@@ -18,27 +18,23 @@ use NHK\system\Task;
  */
 class Reporter extends Worker {
     /**
-     *
+     * @desc seconds, send interval
      */
     const SEND_INTERVAL = 60;
     /**
-     *
-     */
-    const SEND_MAX_COUNT = 10;
-    /**
-     *
+     * @desc expired trigger exception, seconds
      */
     const EXPIRE_TIME = 600;
     /**
-     * @var
+     * @var resource
      */
     private $_queue;
     /**
-     * @var
+     * @var int
      */
     private $_index;
     /**
-     * @var
+     * @var int
      */
     private $_batchCount;
     /**
@@ -69,10 +65,12 @@ class Reporter extends Worker {
     }
 
     /**
-     *
+     * @desc batch job, get message from queue, send by sms or email
      */
     public function sendReport() {
         $this->_index = 0;
+        $sendInterval = Config::getInstance()->get($this->_name . '.send_interval', self::SEND_INTERVAL);
+        $expireTime = Config::getInstance()->get($this->_name . '.expire_time', self::EXPIRE_TIME);
 
         while (true) {
             $ret = msg_receive($this->_queue, Env::MSG_TYPE_ALERT, $msgtype, 1024, $message, true, 0, $error);
@@ -87,13 +85,13 @@ class Reporter extends Worker {
             }
 
             list($id, $time) = each($message);
-            if (time() - $time > self::EXPIRE_TIME) {
+            if (time() - $time > $expireTime) {
                 continue;
             }
 
             if (isset($this->_history[$id])) {
                 $lastTime = $this->_history[$id];
-                if (time() - $lastTime <= self::SEND_INTERVAL) {
+                if (time() - $lastTime <= $sendInterval) {
                     continue;
                 }
             }
@@ -109,7 +107,6 @@ class Reporter extends Worker {
      * @param $id
      */
     private function _alertUsers($id) {
-        require_once NHK_PATH_ROOT . 'vendor/phpmailer.php';
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
         $this->_email->Subject = $config['desc'];
@@ -125,7 +122,7 @@ class Reporter extends Worker {
         }
 
         if (!$this->_email->send()) {
-            Core::alert('send mail error: ' . $this->_email->ErrorInfo);
+            Log::write('send mail error: ' . $this->_email->ErrorInfo);
         }
         else {
             Core::alert('send mail success', false);
@@ -148,4 +145,7 @@ class Reporter extends Worker {
         // TODO: Implement processRemote() method.
     }
 
-} 
+    private function _sendMail($to, $title, $content) {
+
+    }
+}

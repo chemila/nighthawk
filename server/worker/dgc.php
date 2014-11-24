@@ -78,7 +78,7 @@ class DGC extends Worker {
             }
 
             if ($key = Strategy::validate($this->_name, $message)) {
-                $this->_collect($key);
+                $this->_collect($key, $message);
             }
         }
 
@@ -87,14 +87,18 @@ class DGC extends Worker {
 
     /**
      * @param string $key
+     * @param array  $details
      * @return bool
      * @throws Exception
      */
-    private function _collect($key) {
+    private function _collect($key, $details) {
+        // TODO: save current error details in redis|database
         $id = Strategy::getQueueId($this->_name, $key);
-        //Core::alert('match strategy: ' . $id);
+        $data = array(
+            $id => time(),
+        );
 
-        $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, array($id => time()), true, false, $error);
+        $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, $data, true, false, $error);
         if (!$res) {
             throw new Exception('send msg queue failed: ' . $error);
         }
@@ -114,25 +118,10 @@ class DGC extends Worker {
      * init consumer connection
      */
     private function _prepareConsumer() {
-        $config = Config::getInstance()->get($this->_name);
-        $consumerConfig = array(
-            'host' => $config['amqp.host'],
-            'port' => $config['amqp.port'],
-            'login' => $config['amqp.login'],
-            'password' => $config['amqp.password'],
-            'vhost' => $config['amqp.vhost'],
-            'prefetch_count' => $config['amqp.prefetch_count'],
-            'exname' => $config['amqp.exname'],
-            'extype' => $config['amqp.extype'],
-            'persist' => $config['amqp.persist'],
-            'duable' => $config['amqp.duable'],
-            'routing' => $config['amqp.routing'],
-            'queue' => $config['amqp.queue'],
-            'autoack' => $config['amqp.auto_ack'],
-        );
+        $config = Config::getInstance()->get($this->_name . '.amqp');
 
         try {
-            $this->_consumer = new Consumer($consumerConfig);
+            $this->_consumer = new Consumer($config);
             $this->_consumer->prepare();
         }
         catch (\Exception $e) {

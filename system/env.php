@@ -43,6 +43,7 @@ class Env {
             'sysvmsg' => true,
             'libevent' => false,
             'proctitle' => false,
+            'amqp' => true,
         );
     /**
      * @var array
@@ -256,7 +257,7 @@ class Env {
 
         $pid = @file_get_contents($pidFile);
         if (!empty($pid)) {
-            $this->_addError('system is already running, pid is ' . $pid, self::ERROR_WARNING);
+            $this->_addError('system is already running, pid is: ' . $pid, self::ERROR_WARNING);
         }
 
         return true;

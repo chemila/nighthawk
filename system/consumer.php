@@ -67,8 +67,8 @@ class Consumer {
             'login',
             'password',
             'persist',
-            'duable',
-            'autoack',
+            'durable',
+            'auto_ack',
             'queue',
             'prefetch_count',
         );

@@ -104,11 +104,10 @@ class Trigger extends Worker {
                 $this->_addStatistics('messageExpired');
                 continue;
             }
-
             $this->_checkException($id, $limit);
         }
 
-        $this->_addStatistics('runTime', time() - $start);
+        $this->_addStatistics('batchRunTime', time() - $start);
 
         return true;
     }
@@ -149,7 +148,6 @@ class Trigger extends Worker {
             }
         }
         else {
-            $this->_addStatistics('shmNoVar');
             $array = array($id => 1);
         }
 
@@ -176,7 +174,7 @@ class Trigger extends Worker {
     public function serve($package) {
         $package = trim($package);
         switch ($package) {
-            case 'stat':
+            case 'msg_stat':
                 $state = msg_stat_queue($this->_queue);
                 $this->sendToClient(json_encode($state) . "\n");
                 break;
@@ -188,7 +186,7 @@ class Trigger extends Worker {
                 break;
             case 'help':
             default:
-                $this->sendToClient("input: stat|summary|quit\n");
+                $this->sendToClient("input: msg_stat|summary|quit\n");
                 break;
         }
     }

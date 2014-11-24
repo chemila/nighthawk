@@ -46,11 +46,9 @@ class Monitor extends Worker {
     public function checkHeatBeat() {
         if ($pid = Process::isMasterRunning()) {
             Core::alert('master is running', false);
-            Log::write('master is running, pid is: ' . $pid);
         }
         else {
             Core::alert('master is dead');
-            Log::write('master is dead');
         }
     }
 

@@ -24,7 +24,7 @@ $ex = new AMQPExchange($channel);
 $ex->setName($exname);
 
 //消息内容
-$message = "TEST MESSAGE! 测试消息！";
+$message = "UID=0! 测试消息！";
 //发送消息
 for ($i = 0; $i < $count; ++$i) {
     echo "Send Message:" . $ex->publish($message, $route) . "\n";

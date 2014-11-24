@@ -10,7 +10,7 @@ class Strategy {
     /**
      * @desc queue key separator
      */
-    const KEY_SEPARATOR = '-';
+    const KEY_SEPARATOR = '.';
     /**
      * @var array
      */
@@ -93,6 +93,7 @@ class Strategy {
             }
 
             $pattern = $value['pattern'];
+            // TODO: match multiple strategy, trigger all not just first one
             if (preg_match($pattern, $content)) {
                 return $key;
             }

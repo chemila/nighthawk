@@ -175,6 +175,7 @@ class Process {
      * @return bool
      */
     public static function closeSTD() {
+        return;
         global $STDERR, $STDOUT;
 
         if (Core::getDebugMode() && posix_ttyname(STDOUT)) {

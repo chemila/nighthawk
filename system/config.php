@@ -9,13 +9,13 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  */
 class Config {
     /**
-     * @var string
+     * @var array
      */
-    public static $fileMaster;
+    private $_data = array();
     /**
      * @var array
      */
-    public static $data = array();
+    private $_cache = array();
     /**
      * @var $this
      */
@@ -26,14 +26,16 @@ class Config {
      */
     private function __construct() {
         $fileMaster = NHK_PATH_CONF . 'master.conf';
+
         if (!file_exists($fileMaster)) {
             throw new \Exception("invalid master config file");
         }
-        self::$data['master'] = self::parseFile($fileMaster);
-        self::$fileMaster = realpath($fileMaster);
+
+        $this->_data['master'] = $this->_parseFile($fileMaster);
+
         foreach (glob(NHK_PATH_CONF . 'workers/*.conf') as $fileWorker) {
             $workerName = basename($fileWorker, '.conf');
-            self::$data[$workerName] = self::parseFile($fileWorker);
+            $this->_data[$workerName] = $this->_parseFile($fileWorker);
         }
     }
 
@@ -42,7 +44,7 @@ class Config {
      * @return array
      * @throws \Exception
      */
-    protected function parseFile($file) {
+    private function _parseFile($file) {
         $array = parse_ini_file($file, true);
         if (!is_array($array) || empty($array)) {
             throw new \Exception('Invalid configuration format');
@@ -68,9 +70,12 @@ class Config {
      * @return string
      */
     public function get($uri, $default = null) {
-        $node = self::$data;
-        $paths = explode('.', $uri);
+        if (array_key_exists($uri, $this->_cache)) {
+            return $this->_cache[$uri];
+        }
 
+        $node = $this->_data;
+        $paths = explode('.', $uri);
         while (!empty($paths)) {
             $path = array_shift($paths);
             if (!isset($node[$path])) {
@@ -80,14 +85,14 @@ class Config {
             $node = $node[$path];
         }
 
-        return $node;
+        return $this->_cache[$uri] = $node;
     }
 
     /**
      * @return array
      */
     public function getAllWorkers() {
-        $copy = self::$data;
+        $copy = $this->_data;
         unset($copy['master']);
 
         return $copy;
