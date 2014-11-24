@@ -7,6 +7,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Task
  *
  * @package NHK\system
+ * @author fuqiang(chemila@me.com)
  */
 class Task {
     /**

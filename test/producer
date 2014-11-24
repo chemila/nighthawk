@@ -31,14 +31,4 @@ for ($i = 0; $i < $count; ++$i) {
 //    sleep(1);
 }
 
-//$data = array(
-//    'topic' => 'test',
-//);
-////消息内容
-//$message = json_encode($data);
-////发送消息
-//for ($i = 0; $i < 5; ++$i) {
-//    echo "Send Message:" . $ex->publish($message, $route) . "\n";
-//}
-
 $conn->disconnect();

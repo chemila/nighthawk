@@ -15,6 +15,7 @@ use NHK\System\Consumer;
  * Class DGC
  *
  * @package NHK\server\worker
+ * @author fuqiang(chemila@me.com)
  */
 class DGC extends Worker {
     /**
@@ -67,7 +68,6 @@ class DGC extends Worker {
         while (true) {
             // TODO: Implement dealBussiness() method.
             $message = $this->_consumer->get();
-
             $this->_index++;
             if ($this->_index >= $this->_batchCount) {
                 break;
@@ -118,7 +118,7 @@ class DGC extends Worker {
      * init consumer connection
      */
     private function _prepareConsumer() {
-        $config = Config::getInstance()->get($this->_name . '.amqp');
+        $config = Config::getInstance()->get($this->_name . '.amqp_dev');
 
         try {
             $this->_consumer = new Consumer($config);

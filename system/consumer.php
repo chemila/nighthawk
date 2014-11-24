@@ -5,6 +5,7 @@ namespace NHK\System;
  * Class Consumer
  *
  * @package NHK\System
+ * @author fuqiang(chemila@me.com)
  */
 class Consumer {
     /**

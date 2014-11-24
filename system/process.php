@@ -9,6 +9,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Process
  *
  * @package NHK\System
+ * @author fuqiang(chemila@me.com)
  */
 class Process {
     /**

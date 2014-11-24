@@ -12,4 +12,10 @@ return array(
         'pattern' => '/^UID=0/i',
         'alerts' => array(13788993215, 'jofu@vip.qq.com'),
     ),
+    'hfb_paypassword' => array(
+        'desc' => '用户支付密码错误',
+        'frequency' => array(2, 5),
+        'pattern' => '/vendor_hfb_member-checkPayPwd/i',
+        'alerts' => array(13788993215, 13816246686),
+    ),
 );

@@ -15,6 +15,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Master
  *
  * @package NHK\Server
+ * @author fuqiang(chemila@me.com)
  */
 class Master {
     const PROTOCAL_UDP = 'udp';

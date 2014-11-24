@@ -15,6 +15,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Worker
  *
  * @package NHK\Server
+ * @author fuqiang(chemila@me.com)
  */
 abstract class Worker {
     const EVENT_SIGNAL_PREFIX = 'SIG_';

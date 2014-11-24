@@ -15,6 +15,7 @@ use NHK\system\Task;
  * Class Monitor
  *
  * @package NHK\Server\Worker
+ * @author fuqiang(chemila@me.com)
  */
 class Monitor extends Worker {
     const INTERVAL_STATUS = 20;

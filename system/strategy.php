@@ -5,6 +5,7 @@ namespace NHK\system;
  * Class Strategy
  *
  * @package NHK\system
+ * @author fuqiang(chemila@me.com)
  */
 class Strategy {
     /**

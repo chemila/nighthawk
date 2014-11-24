@@ -17,6 +17,7 @@ use NHK\system\Task;
  * Class Reporter
  *
  * @package NHK\server\worker
+ * @author fuqiang(chemila@me.com)
  */
 class Reporter extends Worker {
     /**
@@ -64,7 +65,7 @@ class Reporter extends Worker {
             $this->_email->isSendmail();
         }
         $this->_email->setFrom($emails['from'], $emails['name']);
-        $this->_sms = new \Mongate(Config::getInstance()->get($this->_name . '.sms_mongate'));
+        $this->_sms = new \Mongate(Config::getInstance()->get($this->_name . '.sms'));
         Strategy::loadData();
         Task::add('sendReport', 1, array($this, 'sendReport'));
     }
@@ -148,7 +149,7 @@ class Reporter extends Worker {
 
         if (!empty($smsTo)) {
             if ($this->_sms->sendSms($smsTo, $this->_genSmsContent($data))) {
-                Core::alert('send sms to users: ' . implode(';', $smsTo));
+                Core::alert('send sms to users: ' . implode(';', $smsTo), false);
             }
             else {
                 Log::write('send sms error: ' . $this->_sms->getLastError());
@@ -177,7 +178,7 @@ class Reporter extends Worker {
      * @return string
      */
     private function _genSmsContent(array $data) {
-        $template = Config::getInstance()->get($this->_name . '.sms_mongate.template');
+        $template = Config::getInstance()->get($this->_name . '.sms.template');
 
         return strtr($template, $data);
     }
@@ -187,7 +188,7 @@ class Reporter extends Worker {
      * @return string
      */
     private function _genMailContent(array $data) {
-        $template = Config::getInstance()->get($this->_name . '.sms_mongate.template');
+        $template = Config::getInstance()->get($this->_name . '.email.template');
 
         return strtr($template, $data);
     }

@@ -14,6 +14,7 @@ use NHK\system\Task;
  * Class Trigger
  *
  * @package NHK\Server\Worker
+ * @author fuqiang(chemila@me.com)
  */
 class Trigger extends Worker {
     /**

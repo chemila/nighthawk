@@ -6,6 +6,7 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Config
  *
  * @package NHK\System
+ * @author fuqiang(chemila@me.com)
  */
 class Config {
     /**
