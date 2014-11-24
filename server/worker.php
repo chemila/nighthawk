@@ -38,6 +38,9 @@ abstract class Worker {
      * @desc buffer size
      */
     const MAX_SEND_BUFF_SIZE = 2024000;
+    /**
+     * @desc force kill master, wait time(second)
+     */
     const EXIT_WAIT_TIME = 10;
     /**
      * @desc on running state
@@ -378,7 +381,7 @@ abstract class Worker {
 
     /**
      * @param string $buff
-     * @return int|false
+     * @return int|bool
      */
     abstract public function parseInput($buff);
 
@@ -389,7 +392,7 @@ abstract class Worker {
     abstract public function serve($package);
 
     /**
-     *
+     * @desc on udp connection
      */
     public function recvUdp() {
         $address = null;

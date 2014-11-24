@@ -241,7 +241,7 @@ class Master {
 
                 self::$_sockets[$name] = stream_socket_server($array['listen'], $code, $msg, $flags);
                 if (!self::$_sockets[$name]) {
-                    Core::alert('socket server listen failed, msg: ' . $msg, true);
+                    Core::alert(sprintf('socket server listen failed, worker: %s, msg: %s', $name, $msg), true);
                     exit(1);
                 }
             }
@@ -417,6 +417,10 @@ class Master {
         if (is_resource($this->_msg)) {
             msg_remove_queue($this->_msg);
         }
+
+        self::$_sockets = array();
+        self::$_workers = array();
+        self::$_workersMap = array();
     }
 
     /**

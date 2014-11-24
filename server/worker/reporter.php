@@ -17,9 +17,10 @@ use NHK\system\Task;
  * Class Reporter
  *
  * @package NHK\server\worker
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
 class Reporter extends Worker {
+    const REPORT_INTERVAL = 1;
     /**
      * @desc seconds, send interval
      */
@@ -67,7 +68,7 @@ class Reporter extends Worker {
         $this->_email->setFrom($emails['from'], $emails['name']);
         $this->_sms = new \Mongate(Config::getInstance()->get($this->_name . '.sms'));
         Strategy::loadData();
-        Task::add('sendReport', 1, array($this, 'sendReport'));
+        Task::add('sendReport', self::REPORT_INTERVAL, array($this, 'sendReport'));
     }
 
     /**
@@ -103,17 +104,17 @@ class Reporter extends Worker {
             }
 
             $this->_history[$id] = time();
-            //TODO: invoke email|sms sender
-            Core::alert('send email|sms for: ' . $id);
-            $this->_alertUsers($id, $time);
+            Core::alert('send email or sms for: ' . $id);
+            $this->_alertUsers($id, $time, $message);
         }
     }
 
     /**
      * @param string $id
      * @param int    $alertAt
+     * @param string $message
      */
-    private function _alertUsers($id, $alertAt) {
+    private function _alertUsers($id, $alertAt, $message) {
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
         $smsTo = $mailsTo = array();
@@ -132,7 +133,7 @@ class Reporter extends Worker {
             '{time}' => date('Y-m-d H:i:s', $alertAt),
             '{desc}' => $config['desc'],
             '{id}' => $id,
-            '{content}' => 'test',
+            '{content}' => substr($message, 0, 50),
         );
 
         if (!empty($mailsTo)) {
@@ -191,5 +192,9 @@ class Reporter extends Worker {
         $template = Config::getInstance()->get($this->_name . '.email.template');
 
         return strtr($template, $data);
+    }
+
+    public function __destruct() {
+        msg_remove_queue($this->_queue);
     }
 }

@@ -92,18 +92,23 @@ class Mongate {
     }
 
     /**
-     * @param array  $mobiles
-     * @param string $content
+     * @param array|string $mobiles
+     * @param string       $content
      * @return mixed
      */
-    public function sendSms(array $mobiles, $content) {
+    public function sendSms($mobiles, $content) {
         $params = array();
+
+        if (!is_array($mobiles)) {
+            $mobiles = explode(",", $mobiles);
+        }
+
         $total = count($mobiles);
-        $array = implode(",", $mobiles);
+
         $params['userId'] = $this->_username;
         $params['password'] = $this->_password;
         $params['pszSubPort'] = $this->_port;
-        $params['pszMobis'] = $array;
+        $params['pszMobis'] = $mobiles;
         $params['pszMsg'] = $content;
         $params['iMobiCount'] = $total;
 

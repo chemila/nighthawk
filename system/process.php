@@ -135,6 +135,7 @@ class Process {
             usleep(1000);
             if (time() - $startTime >= $waitTime) {
                 self::killMaster();
+                usleep(5000);
                 break;
             }
         }
