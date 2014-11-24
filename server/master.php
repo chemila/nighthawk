@@ -29,7 +29,7 @@ class Master {
     /**
      * @desc limit max workers children
      */
-    const MAX_CHILDREN = self::MAX_WORKER_EXCEPTION;
+    const MAX_CHILDREN = 10;
     /**
      * @desc init state
      */
@@ -230,6 +230,8 @@ class Master {
      */
     private function _spawnWorkers() {
         $config = Config::getInstance()->getAllWorkers();
+        $maxChildren = Config::getInstance()->get('master.max_children', self::MAX_CHILDREN);
+
         foreach ($config as $name => $array) {
             if (isset($array['listen']) && !isset(self::$_sockets[$name])) {
                 $flags = strtolower(substr($array['listen'], 0, 3)) == self::PROTOCAL_UDP
@@ -248,7 +250,7 @@ class Master {
             }
 
             $children = isset($array['start_workers']) ? (int)$array['start_workers'] : 1;
-            while (count(self::$_workers[$name]) < min($children, self::MAX_CHILDREN)) {
+            while (count(self::$_workers[$name]) < min($children, $maxChildren)) {
                 if (!$this->_forkWorker($name)) {
                     Core::alert('worker exit');
                     Log::write(sprintf('worker %s exit loop', $name));
@@ -337,12 +339,14 @@ class Master {
      * @desc make sure worker is running
      */
     private function _checkWorkers() {
+        $maxExit = Config::getInstance()->get('master.max_worker_exit', self::MAX_WORKER_EXCEPTION);
+
         while (($pid = pcntl_waitpid(-1, $status, WNOHANG | WUNTRACED)) != 0) {
             if (0 != $status) {
                 Core::alert('worker exit code: ' . $status);
                 $this->_addReport(self::REPORT_WORKER_EXIT_UNEXPECTED);
                 self::$_workerExit++;
-                if (self::$_workerExit >= self::MAX_WORKER_EXCEPTION) {
+                if (self::$_workerExit >= $maxExit) {
                     $this->_stop();
                 }
             }
@@ -488,7 +492,7 @@ class Master {
 
         Task::add(
             'kill_worker_' . $name,
-            self::KILL_WAIT,
+            Config::getInstance()->get('master.kill_wait', self::KILL_WAIT),
             array('NHK\\System\\Process', 'forceKill'), null, false,
             array($workerPids)
         );
