@@ -14,7 +14,7 @@ use NHK\system\Task;
  * Class Trigger
  *
  * @package NHK\Server\Worker
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
 class Trigger extends Worker {
     /**
@@ -95,7 +95,10 @@ class Trigger extends Worker {
 
             $this->_addStatistics('msgReceived');
 
-            list($id, $time) = each($message);
+            $id = $message['id'];
+            $time = $message['time'];
+            $details = $message['details'];
+
             list($name, $key) = Strategy::getSectionName($id);
             $config = Strategy::getConfig($name, $key);
             list($limit, $interval) = $config['frequency'];
@@ -105,7 +108,7 @@ class Trigger extends Worker {
                 $this->_addStatistics('messageExpired');
                 continue;
             }
-            $this->_checkException($id, $limit);
+            $this->_checkException($id, $limit, $details);
         }
 
         $this->_addStatistics('batchRunTime', time() - $start);
@@ -129,9 +132,10 @@ class Trigger extends Worker {
     /**
      * @param string $id
      * @param int    $limit
+     * @param string $details
      * @throws Exception
      */
-    private function _checkException($id, $limit = 10) {
+    private function _checkException($id, $limit = 10, $details = '') {
         sem_acquire($this->_sem);
         if (shm_has_var($this->_shm, Env::SHM_TRIGGER)) {
             $string = shm_get_var($this->_shm, Env::SHM_TRIGGER);
@@ -144,7 +148,7 @@ class Trigger extends Worker {
             }
 
             if ($array[$id] >= $limit) {
-                $this->alert($id);
+                $this->alert($id, $details);
                 unset($array[$id]); // Clear counter
             }
         }
@@ -160,12 +164,19 @@ class Trigger extends Worker {
 
     /**
      * @param string $id
+     * @param string $details
+     * @return bool
      */
-    public function alert($id) {
+    public function alert($id, $details = null) {
         $this->_addStatistics('totalAlerts');
-        $message = array($id => time());
-        msg_send($this->_queue, Env::MSG_TYPE_ALERT, $message, true, false, $error);
+        $message = array(
+            'id' => $id,
+            'time' => time(),
+            'details' => $details,
+        );
         Core::alert('trigger alert: ' . $id);
+
+        return msg_send($this->_queue, Env::MSG_TYPE_ALERT, $message, true, false, $error);
     }
 
     /**
@@ -173,6 +184,18 @@ class Trigger extends Worker {
      * @return bool
      */
     public function serve($package) {
+        $data = \NHK\server\protocal\Trigger::decode($package);
+        $this->sendToClient(json_encode($data) . "\n");
+        $id = Strategy::getQueueId($data['name'], $data['key']);
+
+        return $this->alert($id, $data['msg']);
+    }
+
+    /**
+     * @param string $package
+     * @return bool
+     */
+    public function serveCmd($package) {
         $package = trim($package);
         switch ($package) {
             case 'msg_stat':

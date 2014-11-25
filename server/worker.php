@@ -402,6 +402,7 @@ abstract class Worker {
         }
 
         $this->_currentClient = $address;
+        $this->serve($buff);
 
         return true;
     }

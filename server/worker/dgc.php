@@ -95,7 +95,9 @@ class DGC extends Worker {
         // TODO: save current error details in redis|database
         $id = Strategy::getQueueId($this->_name, $key);
         $data = array(
-            $id => time(),
+            'id' => $id,
+            'time' => time(),
+            'details' => $details,
         );
 
         $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, $data, true, false, $error);

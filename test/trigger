@@ -1,0 +1,6 @@
+#!/usr/bin/env php
+<?php
+require_once(__DIR__ . '/../client/trigger.php');
+$trigger = new \NHK\Client\Trigger('localhost', 2014);
+printf("send a message\n");
+$trigger->report('dgc', 'user_login', 'this is a test');

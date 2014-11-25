@@ -82,7 +82,6 @@ class Reporter extends Worker {
         while (true) {
             $ret = msg_receive($this->_queue, Env::MSG_TYPE_ALERT, $msgtype, 1024, $message, true, 0, $error);
             $this->_index++;
-
             if ($this->_index >= $this->_batchCount) {
                 break;
             }
@@ -91,7 +90,10 @@ class Reporter extends Worker {
                 continue;
             }
 
-            list($id, $time) = each($message);
+            $id = $message['id'];
+            $time = $message['time'];
+            $details = $message['details'];
+
             if (time() - $time > $expireTime) {
                 continue;
             }
@@ -105,16 +107,16 @@ class Reporter extends Worker {
 
             $this->_history[$id] = time();
             Core::alert('send email or sms for: ' . $id);
-            $this->_alertUsers($id, $time, $message);
+            $this->_alertUsers($id, $time, $details);
         }
     }
 
     /**
      * @param string $id
      * @param int    $alertAt
-     * @param string $message
+     * @param string $details
      */
-    private function _alertUsers($id, $alertAt, $message) {
+    private function _alertUsers($id, $alertAt, $details) {
         $config = Strategy::getConfigById($id);
         $users = $config['alerts'];
         $smsTo = $mailsTo = array();
@@ -133,8 +135,9 @@ class Reporter extends Worker {
             '{time}' => date('Y-m-d H:i:s', $alertAt),
             '{desc}' => $config['desc'],
             '{id}' => $id,
-            '{content}' => substr($message, 0, 50),
+            '{content}' => substr($details, 0, 50),
         );
+        var_dump($data);
 
         if (!empty($mailsTo)) {
             $this->_email->Subject = $config['desc'];
