@@ -108,12 +108,12 @@ class Mongate {
         $params['userId'] = $this->_username;
         $params['password'] = $this->_password;
         $params['pszSubPort'] = $this->_port;
-        $params['pszMobis'] = $mobiles;
+        $params['pszMobis'] = implode(',', $mobiles);
         $params['pszMsg'] = $content;
         $params['iMobiCount'] = $total;
 
         $res = $this->_soap->call('MongateCsSpSendSmsNew', $params);
-        if (in_array($res, self::$error)) {
+        if (array_key_exists($res, self::$error)) {
             $this->_lastError = self::$error[$res];
 
             return false;

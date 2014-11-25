@@ -118,7 +118,7 @@ class DGC extends Worker {
      * init consumer connection
      */
     private function _prepareConsumer() {
-        $config = Config::getInstance()->get($this->_name . '.amqp_dev');
+        $config = Config::getInstance()->get($this->_name . '.amqp');
 
         try {
             $this->_consumer = new Consumer($config);
