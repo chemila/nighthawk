@@ -185,8 +185,8 @@ class Trigger extends Worker {
      */
     public function serve($package) {
         $data = \NHK\server\protocal\Trigger::decode($package);
-        $this->sendToClient(json_encode($data) . "\n");
         $id = Strategy::getQueueId($data['name'], $data['key']);
+        $this->sendToClient(sprintf("trigger alert id: %d", $id));
 
         return $this->alert($id, $data['msg']);
     }

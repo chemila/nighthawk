@@ -24,14 +24,12 @@ class Trigger {
      * @param $name
      * @param $key
      * @param $msg
-     * @return bool
+     * @return bool|string
      */
     public function report($name, $key, $msg) {
         $buffer = self::encode($name, $key, $msg);
-        $res = $this->_send($buffer);
-        var_dump($res);
 
-        return $res;
+        return $this->_send($buffer);
     }
 
     /**
