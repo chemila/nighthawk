@@ -1,5 +1,6 @@
 <?php
 namespace NHK\server\worker;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 use NHK\Server\Worker;
@@ -15,9 +16,10 @@ use NHK\System\Consumer;
  * Class DGC
  *
  * @package NHK\server\worker
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class DGC extends Worker {
+class DGC extends Worker
+{
     /**
      * @desc default batch model count
      */
@@ -25,29 +27,30 @@ class DGC extends Worker {
     /**
      * @var Consumer
      */
-    private $_consumer;
+    private $consumer;
     /**
      * @var
      */
-    private $_index;
+    private $index;
     /**
      * @var
      */
-    private $_batchCount;
+    private $batchCount;
     /**
      * @var
      */
-    private $_queue;
+    private $queue;
 
     /**
      * @return mixed
      */
-    public function run() {
+    public function run()
+    {
         // TODO: Implement run() method.
-        $this->_prepareConsumer();
-        $this->_queue = Env::getInstance()->getMsgQueue();
-        $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
-        Strategy::loadData($this->_name);
+        $this->prepareConsumer();
+        $this->queue = Env::getInstance()->getMsgQueue();
+        $this->batchCount = Config::getInstance()->get($this->name . '.batch_count', self::DEFAULT_BATCH_COUNT);
+        Strategy::loadData($this->name);
         Task::add('consumeLog', 1, array($this, 'consumeLog'));
     }
 
@@ -55,21 +58,23 @@ class DGC extends Worker {
      * @param string $buff
      * @return int|false
      */
-    public function parseInput($buff) {
+    public function parseInput($buff)
+    {
         // TODO: Implement parseInput() method.
     }
 
     /**
      * @return bool
      */
-    public function consumeLog() {
-        $this->_index = 0;
+    public function consumeLog()
+    {
+        $this->index = 0;
 
         while (true) {
             // TODO: Implement dealBussiness() method.
-            $message = $this->_consumer->get();
-            $this->_index++;
-            if ($this->_index >= $this->_batchCount) {
+            $message = $this->consumer->get();
+            $this->index++;
+            if ($this->index >= $this->batchCount) {
                 break;
             }
 
@@ -77,8 +82,8 @@ class DGC extends Worker {
                 continue;
             }
 
-            if ($key = Strategy::validate($this->_name, $message)) {
-                $this->_collect($key, $message);
+            if ($key = Strategy::validate($this->name, $message)) {
+                $this->collect($key, $message);
             }
         }
 
@@ -91,16 +96,17 @@ class DGC extends Worker {
      * @return bool
      * @throws Exception
      */
-    private function _collect($key, $details) {
+    private function collect($key, $details)
+    {
         // TODO: save current error details in redis|database
-        $id = Strategy::getQueueId($this->_name, $key);
+        $id = Strategy::getQueueId($this->name, $key);
         $data = array(
             'id' => $id,
             'time' => time(),
             'details' => $details,
         );
 
-        $res = msg_send($this->_queue, Env::MSG_TYPE_TRIGGER, $data, true, false, $error);
+        $res = msg_send($this->queue, Env::MSG_TYPE_TRIGGER, $data, true, false, $error);
         if (!$res) {
             throw new Exception('send msg queue failed: ' . $error);
         }
@@ -112,21 +118,22 @@ class DGC extends Worker {
      * @param string $package
      * @return bool
      */
-    public function serve($package) {
+    public function serve($package)
+    {
         // TODO: Implement processRemote() method.
     }
 
     /**
      * init consumer connection
      */
-    private function _prepareConsumer() {
-        $config = Config::getInstance()->get($this->_name . '.amqp');
+    private function prepareConsumer()
+    {
+        $config = Config::getInstance()->get($this->name . '.amqp');
 
         try {
-            $this->_consumer = new Consumer($config);
-            $this->_consumer->prepare();
-        }
-        catch (\Exception $e) {
+            $this->consumer = new Consumer($config);
+            $this->consumer->prepare();
+        } catch (\Exception $e) {
             Core::alert($e->getMessage());
             exit(1);
         }

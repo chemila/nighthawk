@@ -1,0 +1,12 @@
+{
+    "name": "chemila/nighthawk",
+    "description": "alert system",
+    "minimum-stability": "dev",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "JoeFu",
+            "email": "chemila@me.com"
+        }
+    ]
+}

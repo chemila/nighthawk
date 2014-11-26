@@ -1,20 +1,23 @@
 <?php
 namespace NHK\System;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 /**
  * Class Log
  *
  * @package NHK\System
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Log {
+class Log
+{
     /**
      * @param string $msg
      * @param array  $data
      * @return int
      */
-    public static function write($msg, $data = array()) {
+    public static function write($msg, $data = array())
+    {
         $dir = Env::getInstance()->getLogDir() . DIRECTORY_SEPARATOR . date('Y-m-d');
         umask(0);
 

@@ -5,9 +5,10 @@ namespace NHK\system;
  * Class Strategy
  *
  * @package NHK\system
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Strategy {
+class Strategy
+{
     /**
      * @desc queue key separator
      */
@@ -15,9 +16,10 @@ class Strategy {
     /**
      * @var array
      */
-    private static $_data = array();
+    private static $data = array();
 
-    private function __construct() {
+    private function __construct()
+    {
     }
 
     /**
@@ -25,28 +27,30 @@ class Strategy {
      * @throws Exception
      * @return array
      */
-    public static function loadData($name = false) {
+    public static function loadData($name = false)
+    {
         if ($name) {
-            if (!isset(self::$_data[$name])) {
-                self::$_data[$name] = self::parseFile($name);
+            if (!isset(self::$data[$name])) {
+                self::$data[$name] = self::parseFile($name);
             }
 
-            return self::$_data[$name];
+            return self::$data[$name];
         }
 
         foreach (glob(NHK_PATH_ROOT . 'data/strategy/*.php') as $data) {
             $name = basename($data, '.php');
-            self::$_data[$name] = self::parseFile($name);
+            self::$data[$name] = self::parseFile($name);
         }
 
-        return self::$_data;
+        return self::$data;
     }
 
     /**
      * @return mixed
      * @throws Exception
      */
-    public static function parseFile($name) {
+    public static function parseFile($name)
+    {
         $array = include(self::findFile($name));
         if (empty($array)) {
             throw new Exception('parse strategy file error');
@@ -60,7 +64,8 @@ class Strategy {
      * @return string
      * @throws Exception
      */
-    public static function findFile($name) {
+    public static function findFile($name)
+    {
         $path = NHK_PATH_ROOT . 'data/strategy/';
         $file = $path . $name . '.php';
         if (!file_exists($file)) {
@@ -74,10 +79,11 @@ class Strategy {
      * @param null $key
      * @return array
      */
-    public static function getConfig($name, $key = null) {
+    public static function getConfig($name, $key = null)
+    {
         return empty($key)
-            ? self::$_data[$name]
-            : self::$_data[$name][$key];
+            ? self::$data[$name]
+            : self::$data[$name][$key];
     }
 
     /**
@@ -86,8 +92,9 @@ class Strategy {
      * @return bool|string
      * @throws Exception
      */
-    public static function validate($name, $content) {
-        $data = self::$_data[$name];
+    public static function validate($name, $content)
+    {
+        $data = self::$data[$name];
         foreach ($data as $key => $value) {
             if (empty($value['pattern'])) {
                 continue;
@@ -108,7 +115,8 @@ class Strategy {
      * @param $key
      * @return string
      */
-    public static function getQueueId($name, $key) {
+    public static function getQueueId($name, $key)
+    {
         return $name . self::KEY_SEPARATOR . $key;
     }
 
@@ -116,7 +124,8 @@ class Strategy {
      * @param $id
      * @return mixed
      */
-    public static function getSectionName($id) {
+    public static function getSectionName($id)
+    {
         return explode(self::KEY_SEPARATOR, $id);
     }
 
@@ -124,9 +133,10 @@ class Strategy {
      * @param $id
      * @return array
      */
-    public static function getConfigById($id) {
+    public static function getConfigById($id)
+    {
         list($name, $key) = self::getSectionName($id);
-        if (!isset(self::$_data[$name])) {
+        if (!isset(self::$data[$name])) {
             self::loadData($name);
         }
 

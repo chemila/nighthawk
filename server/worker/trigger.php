@@ -1,5 +1,6 @@
 <?php
 namespace NHK\Server\Worker;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 use NHK\Server\Worker;
@@ -16,50 +17,48 @@ use NHK\system\Task;
  * @package NHK\Server\Worker
  * @author  fuqiang(chemila@me.com)
  */
-class Trigger extends Worker {
+class Trigger extends Worker
+{
     /**
      * @desc run in batch model
      */
     const DEFAULT_BATCH_COUNT = 10;
     /**
-     * @var Strategy
+     * @var int
      */
-    private $_strategy;
+    private $index;
     /**
      * @var int
      */
-    private $_index;
-    /**
-     * @var int
-     */
-    private $_batchCount;
+    private $batchCount;
     /**
      * @var resource
      */
-    private $_shm;
+    private $shm;
     /**
      * @var resource
      */
-    private $_sem;
+    private $sem;
     /**
      * @var resource
      */
-    private $_queue;
+    private $queue;
     /**
      * @var array
      */
-    private $_statistics = array();
+    private $statistics = array();
 
     /**
      * @return mixed
      */
-    public function run() {
+    public function run()
+    {
         // TODO: Implement run() method.
-        $this->_batchCount = Config::getInstance()->get($this->_name . '.batch_count', self::DEFAULT_BATCH_COUNT);
-        $this->_shm = Env::getInstance()->getShm();
-        $this->_sem = Env::getInstance()->getSem();
-        shm_remove($this->_shm);
-        $this->_queue = Env::getInstance()->getMsgQueue();
+        $this->batchCount = Config::getInstance()->get($this->name . '.batch_count', self::DEFAULT_BATCH_COUNT);
+        $this->shm = Env::getInstance()->getShm();
+        $this->sem = Env::getInstance()->getSem();
+        shm_remove($this->shm);
+        $this->queue = Env::getInstance()->getMsgQueue();
         Strategy::loadData();
         Task::add('handleException', 1, array($this, 'handleException'));
     }
@@ -68,7 +67,8 @@ class Trigger extends Worker {
      * @param string $buff
      * @return int|false
      */
-    public function parseInput($buff) {
+    public function parseInput($buff)
+    {
         // TODO: Implement parseInput() method.
         return 0;
     }
@@ -76,16 +76,17 @@ class Trigger extends Worker {
     /**
      * @return bool
      */
-    public function handleException() {
-        $this->_index = 0;
+    public function handleException()
+    {
+        $this->index = 0;
         $start = time();
         while (true) {
             $ret = msg_receive(
-                $this->_queue, Env::MSG_TYPE_TRIGGER, $name, 1024, $message, true, MSG_IPC_NOWAIT, $error
+                $this->queue, Env::MSG_TYPE_TRIGGER, $name, 1024, $message, true, MSG_IPC_NOWAIT, $error
             );
 
-            $this->_index++;
-            if ($this->_index >= $this->_batchCount) {
+            $this->index++;
+            if ($this->index >= $this->batchCount) {
                 break;
             }
 
@@ -108,7 +109,7 @@ class Trigger extends Worker {
                 $this->_addStatistics('messageExpired');
                 continue;
             }
-            $this->_checkException($id, $limit, $details);
+            $this->checkException($id, $limit, $details);
         }
 
         $this->_addStatistics('batchRunTime', time() - $start);
@@ -120,12 +121,12 @@ class Trigger extends Worker {
      * @param     $name
      * @param int $count
      */
-    private function _addStatistics($name, $count = 1) {
-        if (isset($this->_statistics[$name])) {
-            $this->_statistics[$name] += $count;
-        }
-        else {
-            $this->_statistics[$name] = $count;
+    private function _addStatistics($name, $count = 1)
+    {
+        if (isset($this->statistics[$name])) {
+            $this->statistics[$name] += $count;
+        } else {
+            $this->statistics[$name] = $count;
         }
     }
 
@@ -135,15 +136,15 @@ class Trigger extends Worker {
      * @param string $details
      * @throws Exception
      */
-    private function _checkException($id, $limit = 10, $details = '') {
-        sem_acquire($this->_sem);
-        if (shm_has_var($this->_shm, Env::SHM_TRIGGER)) {
-            $string = shm_get_var($this->_shm, Env::SHM_TRIGGER);
+    private function checkException($id, $limit = 10, $details = '')
+    {
+        sem_acquire($this->sem);
+        if (shm_has_var($this->shm, Env::SHM_TRIGGER)) {
+            $string = shm_get_var($this->shm, Env::SHM_TRIGGER);
             $array = unserialize($string);
             if (array_key_exists($id, $array)) {
                 $array[$id] += 1;
-            }
-            else {
+            } else {
                 $array[$id] = 1;
             }
 
@@ -151,15 +152,14 @@ class Trigger extends Worker {
                 $this->alert($id, $details);
                 unset($array[$id]); // Clear counter
             }
-        }
-        else {
+        } else {
             $array = array($id => 1);
         }
 
         $this->_addStatistics('shmPutVar');
 
-        shm_put_var($this->_shm, Env::SHM_TRIGGER, serialize($array));
-        sem_release($this->_sem);
+        shm_put_var($this->shm, Env::SHM_TRIGGER, serialize($array));
+        sem_release($this->sem);
     }
 
     /**
@@ -167,7 +167,8 @@ class Trigger extends Worker {
      * @param string $details
      * @return bool
      */
-    public function alert($id, $details = null) {
+    public function alert($id, $details = null)
+    {
         $this->_addStatistics('totalAlerts');
         $message = array(
             'id' => $id,
@@ -176,14 +177,15 @@ class Trigger extends Worker {
         );
         Core::alert('trigger alert: ' . $id);
 
-        return msg_send($this->_queue, Env::MSG_TYPE_ALERT, $message, true, false, $error);
+        return msg_send($this->queue, Env::MSG_TYPE_ALERT, $message, true, false, $error);
     }
 
     /**
      * @param string $package
      * @return bool
      */
-    public function serve($package) {
+    public function serve($package)
+    {
         $data = \NHK\server\protocal\Trigger::decode($package);
         $id = Strategy::getQueueId($data['name'], $data['key']);
         $this->sendToClient(sprintf("trigger alert id: %d", $id));
@@ -195,18 +197,19 @@ class Trigger extends Worker {
      * @param string $package
      * @return bool
      */
-    public function serveCmd($package) {
+    public function serveCmd($package)
+    {
         $package = trim($package);
         switch ($package) {
             case 'msg_stat':
-                $state = msg_stat_queue($this->_queue);
+                $state = msg_stat_queue($this->queue);
                 $this->sendToClient(json_encode($state) . "\n");
                 break;
             case 'summary':
-                $this->sendToClient(json_encode($this->_statistics) . "\n");
+                $this->sendToClient(json_encode($this->statistics) . "\n");
                 break;
             case 'quit':
-                $this->closeConnection($this->_currentConnection);
+                $this->closeConnection($this->currentConn);
                 break;
             case 'help':
             default:

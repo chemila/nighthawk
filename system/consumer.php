@@ -5,9 +5,10 @@ namespace NHK\System;
  * Class Consumer
  *
  * @package NHK\System
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Consumer {
+class Consumer
+{
     /**
      * @var array
      */
@@ -21,36 +22,37 @@ class Consumer {
     /**
      * @var
      */
-    protected $_connection;
+    protected $connection;
     /**
      * @var array
      */
-    protected $_config = array();
+    protected $config = array();
     /**
      * @var
      */
-    protected $_channel;
+    protected $channel;
     /**
      * @var
      */
-    protected $_exchange;
+    protected $exchange;
     /**
      * @var
      */
-    protected $_queue;
+    protected $queue;
     /**
      * @var bool
      */
-    protected $_isPrepared = false;
+    protected $prepared = false;
 
     /**
      * @param array $config
      * @throws \Exception
      */
-    public function __construct(array $config) {
-        $this->_config = $this->_checkConfig($config);
-        $this->_connect();
-        $this->_createChannel();
+    public function __construct(array $config)
+    {
+        $this->config = $this->checkConfig($config);
+        $this->connect();
+        $this->createChannel();
     }
 
     /**
@@ -58,7 +60,8 @@ class Consumer {
      * @return array
      * @throws \Exception
      */
-    protected function _checkConfig(array $config) {
+    protected function checkConfig(array $config)
+    {
         $required = array(
             'host',
             'port',
@@ -86,54 +89,58 @@ class Consumer {
     /**
      * @return \AMQPConnection
      */
-    protected function _connect() {
+    protected function connect()
+    {
         $config = array(
-            'host' => $this->_config['host'],
-            'port' => $this->_config['port'],
-            'vhost' => $this->_config['vhost'],
-            'login' => $this->_config['login'],
-            'password' => $this->_config['password'],
+            'host' => $this->config['host'],
+            'port' => $this->config['port'],
+            'vhost' => $this->config['vhost'],
+            'login' => $this->config['login'],
+            'password' => $this->config['password'],
         );
 
-        $this->_connection = new \AMQPConnection($config);
+        $this->connection = new \AMQPConnection($config);
 
-        if (!empty($this->_config['persist'])) {
-            $this->_connection->pconnect();
-        }
-        else {
-            $this->_connection->connect();
+        if (!empty($this->config['persist'])) {
+            $this->connection->pconnect();
+        } else {
+            $this->connection->connect();
         }
 
-        return $this->_connection;
+        return $this->connection;
     }
 
     /**
      * @return \AMQPChannel
      */
-    protected function _createChannel() {
-        return $this->_channel = new \AMQPChannel($this->_connection);
+    protected function createChannel()
+    {
+        return $this->channel = new \AMQPChannel($this->connection);
     }
 
-    public function __destruct() {
-        if ($this->_connection) {
+    public function __destruct()
+    {
+        if ($this->connection) {
             $this->disconnect();
         }
     }
 
-    public function disconnect() {
-        $this->_connection->disconnect();
+    public function disconnect()
+    {
+        $this->connection->disconnect();
     }
 
-    public function prepare() {
-        if (!$this->_isPrepared) {
-            $this->_createExchange();
-            $this->_declareExchange();
-            $this->_createQueue();
-            $this->_declareQueue();
-            $this->_bindQueue();
-            $this->_setDurable();
-            $this->_setPrefetchCount();
-            $this->_isPrepared = true;
+    public function prepare()
+    {
+        if (!$this->prepared) {
+            $this->createExchange();
+            $this->declareExchange();
+            $this->createQueue();
+            $this->declareQueue();
+            $this->bindQueue();
+            $this->setDurable();
+            $this->setPrefetchCount();
+            $this->prepared = true;
         }
 
         return $this;
@@ -143,63 +150,70 @@ class Consumer {
      * @return \AMQPExchange
      * @throws \Exception
      */
-    protected function _createExchange() {
-        $this->_exchange = new \AMQPExchange($this->_channel);
-        $this->_exchange->setName($this->_config['exname']);
-        $this->_setExchangeType($this->_config['extype']);
+    protected function createExchange()
+    {
+        $this->exchange = new \AMQPExchange($this->channel);
+        $this->exchange->setName($this->config['exname']);
+        $this->setExchangeType($this->config['extype']);
 
-        return $this->_exchange;
+        return $this->exchange;
     }
 
     /**
      * @param string $type
      * @throws \Exception
      */
-    protected function _setExchangeType($type = '') {
+    protected function setExchangeType($type = '')
+    {
         $type = strtolower($type);
 
         if (!array_key_exists($type, self::$exchangeTypes)) {
             throw new \Exception('invalid exchange type: ' . $type);
         }
 
-        $this->_exchange->setType(self::$exchangeTypes[$type]);
+        $this->exchange->setType(self::$exchangeTypes[$type]);
     }
 
     /**
      * @return mixed
      */
-    protected function _declareExchange() {
-        return $this->_exchange->declareExchange();
+    protected function declareExchange()
+    {
+        return $this->exchange->declareExchange();
     }
 
     /**
      * @return \AMQPQueue
      */
-    protected function _createQueue() {
-        $this->_queue = new \AMQPQueue($this->_channel);
-        $this->_queue->setName($this->_config['queue']);
+    protected function createQueue()
+    {
+        $this->queue = new \AMQPQueue($this->channel);
+        $this->queue->setName($this->config['queue']);
 
-        return $this->_queue;
+        return $this->queue;
     }
 
     /**
      * @return mixed
      */
-    protected function _declareQueue() {
-        return $this->_queue->declareQueue();
+    protected function declareQueue()
+    {
+        return $this->queue->declareQueue();
     }
 
-    protected function _bindQueue() {
-        return $this->_queue->bind($this->_config['exname'], $this->_config['routing']);
+    protected function bindQueue()
+    {
+        return $this->queue->bind($this->config['exname'], $this->config['routing']);
     }
 
     /**
      * @return bool
      */
-    protected function _setDurable() {
-        if (!empty($this->_config['duable'])) {
-            $this->_exchange->setFlags(AMQP_DURABLE);
-            $this->_queue->setFlags(AMQP_DURABLE);
+    protected function setDurable()
+    {
+        if (!empty($this->config['duable'])) {
+            $this->exchange->setFlags(AMQP_DURABLE);
+            $this->queue->setFlags(AMQP_DURABLE);
 
             return true;
         }
@@ -208,15 +222,17 @@ class Consumer {
     /**
      * @return mixed
      */
-    protected function _setPrefetchCount() {
-        return $this->_channel->setPrefetchCount($this->_config['prefetch_count']);
+    protected function setPrefetchCount()
+    {
+        return $this->channel->setPrefetchCount($this->config['prefetch_count']);
     }
 
     /**
      * @return bool|string
      */
-    public function get() {
-        $messge = $this->_queue->get(AMQP_AUTOACK);
+    public function get()
+    {
+        $messge = $this->queue->get(AMQP_AUTOACK);
 
         if (is_object($messge)) {
             return $messge->getBody();
@@ -225,13 +241,14 @@ class Consumer {
         return false;
     }
 
-    protected function _reconnect() {
-        if ($this->_isConnected()) {
+    protected function reconnect()
+    {
+        if ($this->isConnected()) {
             return true;
         }
 
-        $this->_connection->reconnect();
-        $this->_createChannel($this->_connection);
+        $this->connection->reconnect();
+        $this->createChannel($this->connection);
 
         return true;
     }
@@ -239,7 +256,8 @@ class Consumer {
     /**
      * @return bool
      */
-    protected function _isConnected() {
-        return $this->_connection->isConnected() && $this->_channel->isConnected();
+    protected function isConnected()
+    {
+        return $this->connection->isConnected() && $this->channel->isConnected();
     }
 }

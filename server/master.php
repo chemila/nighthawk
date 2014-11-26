@@ -15,9 +15,10 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Master
  *
  * @package NHK\Server
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Master {
+class Master
+{
     const PROTOCAL_UDP = 'udp';
     const REPORT_WORKER_EXIT_UNEXPECTED = 'workerExitUnexpected';
     const REPORT_WORKER_REMOVED = 'workerRemoved';
@@ -54,20 +55,20 @@ class Master {
     /**
      * @var array
      */
-    private static $_sockets = array();
+    private static $sockets = array();
     /**
      * @var array
      */
-    private static $_workers = array();
+    private static $workers = array();
     /**
      * @var array
      */
-    private static $_workersMap = array();
+    private static $workersMap = array();
 
     /**
      * @var array
      */
-    private static $_sigHandle
+    private static $signalHandles
         = array(
             SIGINT, // quit
             SIGHUP, // reload
@@ -78,7 +79,7 @@ class Master {
     /**
      * @var array
      */
-    private static $_sigIgnore
+    private static $ignoredSignals
         = array(
             SIGTTIN,
             SIGPIPE,
@@ -89,55 +90,57 @@ class Master {
     /**
      * @var resource
      */
-    private $_shm;
+    private $shm;
     /**
      * @var resource
      */
-    private $_msg;
+    private $msg;
     /**
      * @var int
      */
-    private $_pid;
+    private $pid;
     /**
      * @var string
      */
-    private $_pidFile;
+    private $pidFile;
     /**
      * @var int
      */
-    private $_runState = self::STATE_START;
+    private $runState = self::STATE_START;
     /**
      * @var array
      */
-    private $_report = array();
+    private $statistics = array();
     /**
      * @var int
      */
-    private static $_workerExit = 0;
+    private static $workerExit = 0;
 
     /**
      * @desc init env
      */
-    function __construct() {
-        $this->_shm = Env::getInstance()->getShm();
-        $this->_msg = Env::getInstance()->getMsgQueue();
-        $this->_pidFile = Env::getInstance()->getPIDFile();
+    public function __construct()
+    {
+        $this->shm = Env::getInstance()->getShm();
+        $this->msg = Env::getInstance()->getMsgQueue();
+        $this->pidFile = Env::getInstance()->getPIDFile();
         Process::setProcessTitle(Core::PRODUCT_NAME . ':master');
     }
 
     /**
      * @desc main
      */
-    public function run() {
+    public function run()
+    {
         Core::alert('start to run master', false);
-        $this->_addReport(self::REPORT_START_TIME, time());
-        $this->_runState = self::STATE_START;
-        $this->_daemonize();
-        $this->_savePid();
-        $this->_installSignal();
-        $this->_spawnWorkers();
+        $this->addReport(self::REPORT_START_TIME, time());
+        $this->runState = self::STATE_START;
+        $this->daemonize();
+        $this->savePid();
+        $this->installSignal();
+        $this->spawnWorkers();
         Task::init();
-        $this->_loop();
+        $this->loop();
     }
 
     /**
@@ -145,16 +148,16 @@ class Master {
      * @param int $count
      * @return $this
      */
-    private function _addReport($name, $count = 1) {
-        if (!array_key_exists($name, $this->_report)) {
-            $this->_report[$name] = $count;
-        }
-        else {
-            $this->_report[$name] += $count;
+    private function addReport($name, $count = 1)
+    {
+        if (!array_key_exists($name, $this->statistics)) {
+            $this->statistics[$name] = $count;
+        } else {
+            $this->statistics[$name] += $count;
         }
 
-        $this->_report[self::REPORT_SYS_LOAD_AVG] = sys_getloadavg();
-        $this->_report[self::REPORT_MEMORY_USAGE] = memory_get_usage();
+        $this->statistics[self::REPORT_SYS_LOAD_AVG] = sys_getloadavg();
+        $this->statistics[self::REPORT_MEMORY_USAGE] = memory_get_usage();
 
         return $this;
     }
@@ -162,7 +165,8 @@ class Master {
     /**
      * @desc daemonize master
      */
-    private function _daemonize() {
+    private function daemonize()
+    {
         umask(0);
 
         if ($oldPid = Process::isMasterRunning()) {
@@ -174,8 +178,7 @@ class Master {
         if (-1 == $pid) {
             Core::alert('fork error: ' . posix_strerror(posix_get_last_error()));
             exit(1);
-        }
-        elseif ($pid > 0) {
+        } elseif ($pid > 0) {
             exit(0);
         }
 
@@ -188,8 +191,7 @@ class Master {
         if (-1 == $pid2) {
             Core::alert('fork error: ' . posix_strerror(posix_get_last_error()));
             exit(1);
-        }
-        elseif (0 !== $pid2) {
+        } elseif (0 !== $pid2) {
             exit(0);
         }
 
@@ -199,26 +201,28 @@ class Master {
     /**
      * @desc save master pid to a file, see Env & config
      */
-    private function _savePid() {
-        $this->_pid = posix_getpid();
+    private function savePid()
+    {
+        $this->pid = posix_getpid();
 
-        if (false === @file_put_contents($this->_pidFile, $this->_pid)) {
-            Core::alert('cant save pid in file: ' . $this->_pidFile);
+        if (false === @file_put_contents($this->pidFile, $this->pid)) {
+            Core::alert('cant save pid in file: ' . $this->pidFile);
             exit(1);
         }
 
-        chmod($this->_pidFile, 0644);
+        chmod($this->pidFile, 0644);
     }
 
     /**
      * @desc setup signal handler
      */
-    private function _installSignal() {
-        foreach (self::$_sigIgnore as $signo) {
+    private function installSignal()
+    {
+        foreach (self::$ignoredSignals as $signo) {
             pcntl_signal($signo, SIG_IGN);
         }
 
-        foreach (self::$_sigHandle as $signo) {
+        foreach (self::$signalHandles as $signo) {
             if (!pcntl_signal($signo, array($this, 'signalHandler'), false)) {
                 Core::alert('install signal failed');
                 exit(1);
@@ -229,30 +233,31 @@ class Master {
     /**
      * @desc fork all workers
      */
-    private function _spawnWorkers() {
+    private function spawnWorkers()
+    {
         $config = Config::getInstance()->getAllWorkers();
         $maxChildren = Config::getInstance()->get('master.max_children', self::MAX_CHILDREN);
 
         foreach ($config as $name => $array) {
-            if (isset($array['listen']) && !isset(self::$_sockets[$name])) {
+            if (isset($array['listen']) && !isset(self::$sockets[$name])) {
                 $flags = strtolower(substr($array['listen'], 0, 3)) == self::PROTOCAL_UDP
                     ? STREAM_SERVER_BIND
                     : STREAM_SERVER_BIND | STREAM_SERVER_LISTEN;
 
-                self::$_sockets[$name] = stream_socket_server($array['listen'], $code, $msg, $flags);
-                if (!self::$_sockets[$name]) {
+                self::$sockets[$name] = stream_socket_server($array['listen'], $code, $msg, $flags);
+                if (!self::$sockets[$name]) {
                     Core::alert(sprintf('socket server listen failed, worker: %s, msg: %s', $name, $msg), true);
                     exit(1);
                 }
             }
 
-            if (empty(self::$_workers[$name])) {
-                self::$_workers[$name] = array();
+            if (empty(self::$workers[$name])) {
+                self::$workers[$name] = array();
             }
 
             $children = isset($array['start_workers']) ? (int)$array['start_workers'] : 1;
-            while (count(self::$_workers[$name]) < min($children, $maxChildren)) {
-                if (!$this->_forkWorker($name)) {
+            while (count(self::$workers[$name]) < min($children, $maxChildren)) {
+                if (!$this->forkWorker($name)) {
                     Core::alert('worker exit');
                     Log::write(sprintf('worker %s exit loop', $name));
                     exit(1);
@@ -265,7 +270,8 @@ class Master {
      * @param $name
      * @return bool
      */
-    private function _forkWorker($name) {
+    private function forkWorker($name)
+    {
         $pid = pcntl_fork();
         pcntl_signal_dispatch();
 
@@ -276,17 +282,16 @@ class Master {
         }
 
         if ($pid > 0) {
-            $this->_addWorker($name, $pid);
+            $this->addWorker($name, $pid);
 
             return $pid;
         }
 
         $bindSocket = false;
-        foreach (self::$_sockets as $key => $socket) {
+        foreach (self::$sockets as $key => $socket) {
             if ($name !== $key) {
-                unset(self::$_sockets[$key]);
-            }
-            else {
+                unset(self::$sockets[$key]);
+            } else {
                 $bindSocket = $socket;
             }
         }
@@ -311,58 +316,59 @@ class Master {
      * @param $name
      * @param $pid
      */
-    private function _addWorker($name, $pid) {
-        self::$_workersMap[$pid] = $name;
-        $this->_addReport(self::REPORT_WORKER_TOTAL_CREATED);
+    private function addWorker($name, $pid)
+    {
+        self::$workersMap[$pid] = $name;
+        $this->addReport(self::REPORT_WORKER_TOTAL_CREATED);
 
-        if (!array_key_exists($name, self::$_workers)) {
-            self::$_workers[$name] = array($pid);
-        }
-        else {
-            self::$_workers[$name][$pid] = time();
+        if (!array_key_exists($name, self::$workers)) {
+            self::$workers[$name] = array($pid);
+        } else {
+            self::$workers[$name][$pid] = time();
         }
     }
 
     /**
      * @desc loop signal
      */
-    private function _loop() {
-        $this->_runState = self::STATE_RUNNING;
+    private function loop()
+    {
+        $this->runState = self::STATE_RUNNING;
         for (; ;) {
             sleep(1);
             pcntl_signal_dispatch();
-            $this->_checkWorkers();
-            $this->_syncReport();
+            $this->checkWorkers();
+            $this->syncReport();
         }
     }
 
     /**
      * @desc make sure worker is running
      */
-    private function _checkWorkers() {
+    private function checkWorkers()
+    {
         $maxExit = Config::getInstance()->get('master.max_worker_exit', self::MAX_WORKER_EXCEPTION);
 
         while (($pid = pcntl_waitpid(-1, $status, WNOHANG | WUNTRACED)) != 0) {
             if (0 != $status) {
                 Core::alert('worker exit code: ' . $status);
-                $this->_addReport(self::REPORT_WORKER_EXIT_UNEXPECTED);
-                self::$_workerExit++;
-                if (self::$_workerExit >= $maxExit) {
-                    $this->_stop();
+                $this->addReport(self::REPORT_WORKER_EXIT_UNEXPECTED);
+                self::$workerExit++;
+                if (self::$workerExit >= $maxExit) {
+                    $this->stop();
                 }
             }
 
-            $this->_rmWorker($pid); // remove worker from working list
+            $this->rmWorker($pid); // remove worker from working list
 
-            if ($this->_runState == self::STATE_SHUTDOWN) {
-                if (!$this->_hasWorker()) {
-                    $this->_clearWorker($pid);
+            if ($this->runState == self::STATE_SHUTDOWN) {
+                if (!$this->hasWorker()) {
+                    $this->clearWorker($pid);
                     Process::killMaster();
                     Core::alert('master is shutdown');
                 }
-            }
-            else {
-                $this->_spawnWorkers();
+            } else {
+                $this->spawnWorkers();
             }
         }
     }
@@ -372,18 +378,19 @@ class Master {
      * @param null $name
      * @return bool
      */
-    private function _rmWorker($pid, $name = null) {
-        if (!$name && array_key_exists($pid, self::$_workersMap)) {
-            $name = self::$_workersMap[$pid];
+    private function rmWorker($pid, $name = null)
+    {
+        if (!$name && array_key_exists($pid, self::$workersMap)) {
+            $name = self::$workersMap[$pid];
         }
 
-        unset(self::$_workersMap[$pid]);
-        if (!array_key_exists($name, self::$_workers)) {
+        unset(self::$workersMap[$pid]);
+        if (!array_key_exists($name, self::$workers)) {
             return false;
         }
 
-        $this->_addReport(self::REPORT_WORKER_REMOVED);
-        unset(self::$_workers[$name][$pid]);
+        $this->addReport(self::REPORT_WORKER_REMOVED);
+        unset(self::$workers[$name][$pid]);
 
         return true;
     }
@@ -392,12 +399,13 @@ class Master {
      * @desc check any worker is running or not
      * @return bool
      */
-    private function _hasWorker() {
-        if (empty(self::$_workers) || empty(self::$_workersMap)) {
+    private function hasWorker()
+    {
+        if (empty(self::$workers) || empty(self::$workersMap)) {
             return false;
         }
 
-        foreach (self::$_workers as $name => $pids) {
+        foreach (self::$workers as $name => $pids) {
             if (!empty($pids)) {
                 return true;
             }
@@ -409,27 +417,29 @@ class Master {
     /**
      * @param $pid
      */
-    private function _clearWorker($pid) {
-        if (is_resource($this->_shm)) {
-            shm_detach($this->_shm);
+    private function clearWorker($pid)
+    {
+        if (is_resource($this->shm)) {
+            shm_detach($this->shm);
         }
 
-        if (is_resource($this->_msg)) {
-            msg_remove_queue($this->_msg);
+        if (is_resource($this->msg)) {
+            msg_remove_queue($this->msg);
         }
 
-        self::$_sockets = array();
-        self::$_workers = array();
-        self::$_workersMap = array();
+        self::$sockets = array();
+        self::$workers = array();
+        self::$workersMap = array();
     }
 
     /**
      * @return bool
      */
-    private function _syncReport() {
-        $this->_report['workers'] = self::$_workers;
+    private function syncReport()
+    {
+        $this->statistics['workers'] = self::$workers;
 
-        return shm_put_var($this->_shm, Env::SHM_STATUS, $this->_report);
+        return shm_put_var($this->shm, Env::SHM_STATUS, $this->statistics);
     }
 
     /**
@@ -438,15 +448,16 @@ class Master {
      * @param $signo
      * @return bool
      */
-    public function signalHandler($signo) {
+    public function signalHandler($signo)
+    {
         switch ($signo) {
             case SIGHUP:
                 Log::write('SIGHUP received');
                 Config::reload();
-                $this->_restartWorkers();
+                $this->restartWorkers();
                 break;
             case SIGINT:
-                $this->_stop();
+                $this->stop();
                 break;
             default:
                 break;
@@ -456,21 +467,22 @@ class Master {
     /**
      * @desc restart workers, kill -1|-9
      */
-    private function _restartWorkers() {
-        if ($this->_runState == self::STATE_SHUTDOWN) {
+    private function restartWorkers()
+    {
+        if ($this->runState == self::STATE_SHUTDOWN) {
             return false;
         }
 
-        $this->_runState = self::STATE_RESTART;
-        if (empty(self::$_workers)) {
+        $this->runState = self::STATE_RESTART;
+        if (empty(self::$workers)) {
             return false;
         }
 
-        foreach (self::$_workers as $name => $pids) {
-            $this->_killWorker($name, true);
+        foreach (self::$workers as $name => $pids) {
+            $this->killWorker($name, true);
         }
 
-        $this->_runState = self::STATE_RUNNING;
+        $this->runState = self::STATE_RUNNING;
 
         return true;
     }
@@ -481,18 +493,19 @@ class Master {
      * @return bool
      * @throws Exception
      */
-    private function _killWorker($name, $restart = false) {
+    private function killWorker($name, $restart = false)
+    {
         Core::alert('stopping worker: ' . $name);
-        if (!array_key_exists($name, self::$_workers)) {
+        if (!array_key_exists($name, self::$workers)) {
             Core::alert('worker not exist: ' . $name);
 
             return false;
         }
 
-        $workerPids = self::$_workers[$name];
+        $workerPids = self::$workers[$name];
         foreach ($workerPids as $pid => $startTime) {
             posix_kill($pid, $restart ? SIGHUP : SIGINT);
-            $this->_addReport(self::REPORT_WORKER_KILLED);
+            $this->addReport(self::REPORT_WORKER_KILLED);
         }
 
         Task::add(
@@ -508,16 +521,17 @@ class Master {
     /**
      * @desc catch signal SIGINT to stop workers and master
      */
-    private function _stop() {
-        if (empty(self::$_workers)) {
+    private function stop()
+    {
+        if (empty(self::$workers)) {
             Core::alert('no worker running, exit now!');
             exit(0);
         }
 
-        $this->_runState = self::STATE_SHUTDOWN;
+        $this->runState = self::STATE_SHUTDOWN;
 
-        foreach (self::$_workers as $workerName => $pids) {
-            $this->_killWorker($workerName);
+        foreach (self::$workers as $workerName => $pids) {
+            $this->killWorker($workerName);
         }
 
         Core::alert('master is going to shutdown');

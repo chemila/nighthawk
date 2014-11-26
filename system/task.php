@@ -7,24 +7,25 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Task
  *
  * @package NHK\system
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Task {
+class Task
+{
     /**
      * @var array
      */
-    private static $_tasks = array();
+    private static $tasks = array();
 
     /**
      * @param Event $eventBase
      * @return bool
      */
-    public static function init($eventBase = null) {
+    public static function init($eventBase = null)
+    {
         pcntl_alarm(1);
         if ($eventBase instanceof Event) {
             return $eventBase->add(EV_SIGNAL, SIGALRM, array(__CLASS__, 'signalHandle'));
-        }
-        else {
+        } else {
             return pcntl_signal(SIGALRM, array(__CLASS__, 'signalHandle'), false);
         }
     }
@@ -32,10 +33,11 @@ class Task {
     /**
      * @desc handle signal alarm
      */
-    public static function signalHandle() {
-        if (!empty(self::$_tasks)) {
+    public static function signalHandle()
+    {
+        if (!empty(self::$tasks)) {
             /** @var TaskEntity $entity */
-            foreach (self::$_tasks as $entity) {
+            foreach (self::$tasks as $entity) {
                 if ($entity->isReady()) {
                     $entity->doIt();
                 }
@@ -53,10 +55,11 @@ class Task {
      * @param bool $persist
      * @return bool
      */
-    public static function add($name, $interval, $callback, $startTime = null, $persist = true, $args = array()) {
+    public static function add($name, $interval, $callback, $startTime = null, $persist = true, $args = array())
+    {
         $taskEntity = new TaskEntity($name, $interval, $callback, $startTime, $persist, $args);
-        if (!array_key_exists($name, self::$_tasks)) {
-            self::$_tasks[$name] = $taskEntity;
+        if (!array_key_exists($name, self::$tasks)) {
+            self::$tasks[$name] = $taskEntity;
 
             return true;
         }
@@ -67,16 +70,18 @@ class Task {
     /**
      * @desc reset
      */
-    public static function clear() {
+    public static function clear()
+    {
         pcntl_alarm(1);
-        self::$_tasks = array();
+        self::$tasks = array();
     }
 
     /**
      * @return array
      */
-    public static function display() {
-        return array_keys(self::$_tasks);
+    public static function display()
+    {
+        return array_keys(self::$tasks);
     }
 }
 
@@ -85,7 +90,8 @@ class Task {
  *
  * @package NHK\system
  */
-class TaskEntity {
+class TaskEntity
+{
     /**
      * @var string
      */
@@ -120,7 +126,8 @@ class TaskEntity {
      * @param array    $args
      * @throws Exception
      */
-    public function __construct($name, $interval, $callback, $startTime = null, $persist = true, $args = array()) {
+    public function __construct($name, $interval, $callback, $startTime = null, $persist = true, $args = array())
+    {
         if (!$startTime) {
             $startTime = time();
         }
@@ -141,14 +148,16 @@ class TaskEntity {
     /**
      * @return bool
      */
-    public function isReady() {
+    public function isReady()
+    {
         return $this->runTime <= time();
     }
 
     /**
      * @desc call task callback
      */
-    public function doIt() {
+    public function doIt()
+    {
         call_user_func_array($this->callback, $this->callbackArgs);
         if (true === $this->persist) {
             $this->runTime = time() + $this->interval;
@@ -158,7 +167,8 @@ class TaskEntity {
     /**
      * @return string
      */
-    public function display() {
+    public function display()
+    {
         return sprintf(
             "name: %s, runTime: %s, interval: %d", $this->name, date('Y-m-d H:i:s', $this->runTime),
             $this->interval

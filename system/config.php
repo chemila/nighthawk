@@ -1,42 +1,45 @@
 <?php
 namespace NHK\System;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 /**
  * Class Config
  *
  * @package NHK\System
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Config {
+class Config
+{
     /**
      * @var array
      */
-    private $_data = array();
+    private $data = array();
     /**
      * @var array
      */
-    private $_cache = array();
+    private $cache = array();
     /**
      * @var $this
      */
-    private static $_instance;
+    private static $instance;
 
     /**
      * @throws \Exception
      */
-    private function __construct() {
+    private function __construct()
+    {
         $fileMaster = NHK_PATH_CONF . 'master.conf';
 
         if (!file_exists($fileMaster)) {
             throw new \Exception("invalid master config file");
         }
 
-        $this->_data['master'] = $this->_parseFile($fileMaster);
+        $this->data['master'] = $this->parseFile($fileMaster);
 
         foreach (glob(NHK_PATH_CONF . 'workers/*.conf') as $fileWorker) {
             $workerName = basename($fileWorker, '.conf');
-            $this->_data[$workerName] = $this->_parseFile($fileWorker);
+            $this->data[$workerName] = $this->parseFile($fileWorker);
         }
     }
 
@@ -45,7 +48,8 @@ class Config {
      * @return array
      * @throws \Exception
      */
-    private function _parseFile($file) {
+    private function parseFile($file)
+    {
         $array = parse_ini_file($file, true);
         if (!is_array($array) || empty($array)) {
             throw new \Exception('Invalid configuration format');
@@ -57,12 +61,13 @@ class Config {
     /**
      * @return Config
      */
-    public static function getInstance() {
-        if (!self::$_instance) {
-            return self::$_instance = new self();
+    public static function getInstance()
+    {
+        if (!self::$instance) {
+            return self::$instance = new self();
         }
 
-        return self::$_instance;
+        return self::$instance;
     }
 
     /**
@@ -70,12 +75,13 @@ class Config {
      * @param string $default
      * @return string
      */
-    public function get($uri, $default = null) {
-        if (array_key_exists($uri, $this->_cache)) {
-            return $this->_cache[$uri];
+    public function get($uri, $default = null)
+    {
+        if (array_key_exists($uri, $this->cache)) {
+            return $this->cache[$uri];
         }
 
-        $node = $this->_data;
+        $node = $this->data;
         $paths = explode('.', $uri);
         while (!empty($paths)) {
             $path = array_shift($paths);
@@ -86,14 +92,15 @@ class Config {
             $node = $node[$path];
         }
 
-        return $this->_cache[$uri] = $node;
+        return $this->cache[$uri] = $node;
     }
 
     /**
      * @return array
      */
-    public function getAllWorkers() {
-        $copy = $this->_data;
+    public function getAllWorkers()
+    {
+        $copy = $this->data;
         unset($copy['master']);
 
         return $copy;
@@ -102,8 +109,9 @@ class Config {
     /**
      * @desc reload
      */
-    public static function reload() {
-        self::$_instance = null;
+    public static function reload()
+    {
+        self::$instance = null;
         self::getInstance();
     }
 }

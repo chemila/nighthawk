@@ -1,14 +1,16 @@
 <?php
 namespace NHK\System;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 /**
  * Class Env
  *
  * @package NHK\system
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Env {
+class Env
+{
     /**
      * @desc shared memory default size
      */
@@ -68,41 +70,45 @@ class Env {
     /**
      * @var Env
      */
-    private static $_instance;
+    private static $instance;
     /**
      * @var array
      */
-    private $_errors = array();
+    private $errors = array();
 
     /**
      * @desc init
      */
-    private function __construct() {
+    private function __construct()
+    {
         chdir(NHK_PATH_ROOT);
     }
 
     /**
      * @return Env
      */
-    public static function getInstance() {
-        if (!self::$_instance) {
-            self::$_instance = new self();
+    public static function getInstance()
+    {
+        if (!self::$instance) {
+            self::$instance = new self();
         }
 
-        return self::$_instance;
+        return self::$instance;
     }
 
     /**
      * @return string
      */
-    public static function getVersion() {
+    public static function getVersion()
+    {
         printf("%s\n", self::VERSION);
     }
 
     /**
      * @desc main
      */
-    public function test() {
+    public function test()
+    {
         $methods = get_class_methods($this);
         foreach ($methods as $name) {
             if (!preg_match('~^check\w*$~', $name)) {
@@ -119,21 +125,21 @@ class Env {
     /**
      * @desc show errors
      */
-    public function getResult() {
-        if (empty($this->_errors)) {
+    public function getResult()
+    {
+        if (empty($this->errors)) {
             printf("check env finish, no errors\n");
 
             return true;
         }
 
-        foreach ($this->_errors as $array) {
+        foreach ($this->errors as $array) {
             $type = $array['type'];
             $msg = $array['msg'];
 
             if (self::ERROR_FATAL == $type) {
                 printf("\033[31;40mFatal: %s\033[0m\n", $msg);
-            }
-            else {
+            } else {
                 printf("Notice: %s\n", $msg);
             }
         }
@@ -142,9 +148,10 @@ class Env {
     /**
      * @return bool
      */
-    public function checkVersion() {
+    public function checkVersion()
+    {
         if (version_compare(PHP_VERSION, '5.3.0', '<')) {
-            $this->_addError('PHP version error, required >=5.3', self::ERROR_FATAL);
+            $this->addError('PHP version error, required >=5.3', self::ERROR_FATAL);
 
             return false;
         }
@@ -157,8 +164,9 @@ class Env {
      * @param int $type
      * @return $this
      */
-    private function _addError($msg, $type = self::ERROR_WARNING) {
-        $this->_errors[] = array(
+    private function addError($msg, $type = self::ERROR_WARNING)
+    {
+        $this->errors[] = array(
             'type' => $type,
             'msg' => $msg
         );
@@ -169,16 +177,16 @@ class Env {
     /**
      * @return bool
      */
-    public function checkExtension() {
+    public function checkExtension()
+    {
         foreach (self::$requiredExtensions as $name => $required) {
             if (!extension_loaded($name)) {
                 if ($required) {
-                    $this->_addError(sprintf('PHP extension: %s is required', $name), self::ERROR_FATAL);
+                    $this->addError(sprintf('PHP extension: %s is required', $name), self::ERROR_FATAL);
 
                     return false;
-                }
-                else {
-                    $this->_addError(sprintf('PHP extension: %s not installed', $name), self::ERROR_WARNING);
+                } else {
+                    $this->addError(sprintf('PHP extension: %s not installed', $name), self::ERROR_WARNING);
                 }
             }
         }
@@ -189,14 +197,15 @@ class Env {
     /**
      * @return bool
      */
-    public function checkFunctions() {
+    public function checkFunctions()
+    {
         if ($disabled = ini_get("disable_functions")) {
             $array = array_flip(explode(',', $disabled));
         }
 
         foreach (self::$requiredFunctions as $func) {
             if (isset($array[$func])) {
-                $this->_addError(sprintf('function %s is required', $func), self::ERROR_FATAL);
+                $this->addError(sprintf('function %s is required', $func), self::ERROR_FATAL);
 
                 return false;
             }
@@ -208,10 +217,11 @@ class Env {
     /**
      * @return bool
      */
-    public function checkRlimit() {
+    public function checkRlimit()
+    {
         $systemLimits = posix_getrlimit();
         if (empty($systemLimits)) {
-            $this->_addError('cant get rlimit info', self::ERROR_FATAL);
+            $this->addError('cant get rlimit info', self::ERROR_FATAL);
 
             return false;
         }
@@ -222,12 +232,12 @@ class Env {
             }
 
             if (!array_key_exists($name, $systemLimits)) {
-                $this->_addError('invalid rlimit setting:' . $name, self::ERROR_WARNING);
+                $this->addError('invalid rlimit setting:' . $name, self::ERROR_WARNING);
                 continue;
             }
 
             if ($systemLimits[$name] < $limit) {
-                $this->_addError(
+                $this->addError(
                     sprintf('rlimit %s cant be less than %d, current is %d', $name, $limit, $systemLimits[$name])
                 );
 
@@ -241,24 +251,25 @@ class Env {
     /**
      * @return bool
      */
-    public function checkPidFile() {
+    public function checkPidFile()
+    {
         $pidFile = $this->getPIDFile();
         $dir = dirname($pidFile);
         if (!is_dir($dir)) {
-            $this->_addError('nhk.pid directory not exist', self::ERROR_FATAL);
+            $this->addError('nhk.pid directory not exist', self::ERROR_FATAL);
 
             return false;
         }
 
         if (!is_writeable($dir)) {
-            $this->_addError('nhk.pid directory write failed', self::ERROR_FATAL);
+            $this->addError('nhk.pid directory write failed', self::ERROR_FATAL);
 
             return false;
         }
 
         $pid = @file_get_contents($pidFile);
         if (!empty($pid)) {
-            $this->_addError('system is already running, pid is: ' . $pid, self::ERROR_WARNING);
+            $this->addError('system is already running, pid is: ' . $pid, self::ERROR_WARNING);
         }
 
         return true;
@@ -267,24 +278,26 @@ class Env {
     /**
      * @return string
      */
-    public function getPIDFile() {
+    public function getPIDFile()
+    {
         return Config::getInstance()->get('master.pid_file', NHK_PATH_ROOT . 'data/master.pid');
     }
 
     /**
      * @return bool
      */
-    public function checkLogDir() {
+    public function checkLogDir()
+    {
         $dir = $this->getLogDir();
 
         if (!is_dir($dir)) {
-            $this->_addError('log directory not exit:' . $this->getLogDir(), self::ERROR_FATAL);
+            $this->addError('log directory not exit:' . $this->getLogDir(), self::ERROR_FATAL);
 
             return false;
         }
 
         if (!is_writeable($dir)) {
-            $this->_addError('log directory isnot writable:' . $dir, self::ERROR_FATAL);
+            $this->addError('log directory isnot writable:' . $dir, self::ERROR_FATAL);
 
             return false;
         }
@@ -295,18 +308,20 @@ class Env {
     /**
      * @return string
      */
-    public function getLogDir() {
+    public function getLogDir()
+    {
         return config::getInstance()->get('master.log_dir', NHK_PATH_ROOT . 'log' . DIRECTORY_SEPARATOR);
     }
 
     /**
      * @return bool
      */
-    public function checkUser() {
+    public function checkUser()
+    {
         $userInfo = posix_getpwuid(posix_getuid());
 
         if ($userInfo['name'] !== 'root') {
-            $this->_addError('please run as user root', self::ERROR_FATAL);
+            $this->addError('please run as user root', self::ERROR_FATAL);
 
             return false;
         }
@@ -317,14 +332,16 @@ class Env {
     /**
      * @return string
      */
-    public function getIPCKey() {
+    public function getIPCKey()
+    {
         return Config::getInstance()->get('master.ipc_key', ftok(NHK_PATH_ROOT, 'N'));
     }
 
     /**
      * @return string
      */
-    public function getSHMSize() {
+    public function getSHMSize()
+    {
         return Config::getInstance()->get('master.shm_size', self::DEFAULT_SHM_SIZE);
     }
 
@@ -332,7 +349,8 @@ class Env {
      * @desc get message queue resource
      * @return resource
      */
-    public function getMsgQueue() {
+    public function getMsgQueue()
+    {
         return msg_get_queue($this->getIPCKey());
     }
 
@@ -340,14 +358,16 @@ class Env {
      * @desc get shared memory resource
      * @return resource
      */
-    public function getShm() {
+    public function getShm()
+    {
         return shm_attach($this->getIPCKey(), self::DEFAULT_SHM_SIZE);
     }
 
     /**
      * @return resource
      */
-    public function getSem() {
+    public function getSem()
+    {
         return sem_get($this->getIPCKey(), 1);
     }
 }

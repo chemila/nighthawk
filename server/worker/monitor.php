@@ -1,5 +1,6 @@
 <?php
 namespace NHK\Server\Worker;
+
 defined('NHK_PATH_ROOT') or die('No direct script access.');
 
 require_once NHK_PATH_ROOT . 'vendor/mongate.php';
@@ -19,7 +20,8 @@ use NHK\system\Task;
  * @package NHK\Server\Worker
  * @author  fuqiang(chemila@me.com)
  */
-class Monitor extends Worker {
+class Monitor extends Worker
+{
     /**
      * @desc check worker status, time interval
      */
@@ -39,22 +41,23 @@ class Monitor extends Worker {
     /**
      * @var resource
      */
-    private $_shm;
+    private $shm;
     /**
      * @var \Mongate
      */
-    private $_sms;
+    private $sms;
     /**
      * @var int
      */
-    private $_alertTime = false;
+    private $lastAlert = false;
 
     /**
      * @desc main job goes here
      */
-    public function run() {
-        $this->_shm = Env::getInstance()->getShm();
-        $this->_sms = new \Mongate(Config::getInstance()->get($this->_name . '.sms'));
+    public function run()
+    {
+        $this->shm = Env::getInstance()->getShm();
+        $this->sms = new \Mongate(Config::getInstance()->get($this->name . '.sms'));
         Task::add('checkMaster', self::INTERVAL_MASTER_HEATBEAT, array($this, 'checkMaster'));
         Task::add('checkWorker', self::INTERVAL_STATUS, array($this, 'checkWorker'));
     }
@@ -62,30 +65,31 @@ class Monitor extends Worker {
     /**
      * @desc check master heat beat
      */
-    public function checkMaster() {
+    public function checkMaster()
+    {
         if ($pid = Process::isMasterRunning()) {
             Core::alert('master is running', false);
-        }
-        else {
+        } else {
             Core::alert('master is dead');
-            $this->_alertAdmin('master is dead');
+            $this->alertAdmin('master is dead');
         }
     }
 
     /**
      * @desc check worker status
      */
-    public function checkWorker() {
+    public function checkWorker()
+    {
         if (!$report = $this->getReport()) {
             return false;
         }
 
-        $max = Config::getInstance()->get($this->_name . '.workers_max_exit', self::DEFAULT_MAX_EXIT);
+        $max = Config::getInstance()->get($this->name . '.workers_max_exit', self::DEFAULT_MAX_EXIT);
         if (is_array($report) && isset($report[Master::REPORT_WORKER_EXIT_UNEXPECTED])) {
             $count = intval($report[Master::REPORT_WORKER_EXIT_UNEXPECTED]);
             if ($count >= $max) {
                 Core::alert('too many worker exit');
-                $this->_alertAdmin('too many worker exit');
+                $this->alertAdmin('too many worker exit');
             }
         }
     }
@@ -93,9 +97,10 @@ class Monitor extends Worker {
     /**
      * @return bool|mixed
      */
-    public function getReport() {
-        if (shm_has_var($this->_shm, Env::SHM_STATUS)) {
-            return shm_get_var($this->_shm, Env::SHM_STATUS);
+    public function getReport()
+    {
+        if (shm_has_var($this->shm, Env::SHM_STATUS)) {
+            return shm_get_var($this->shm, Env::SHM_STATUS);
         }
 
         return false;
@@ -105,7 +110,8 @@ class Monitor extends Worker {
      * @param string $buff
      * @return int|bool
      */
-    public function parseInput($buff) {
+    public function parseInput($buff)
+    {
         return 0;
     }
 
@@ -113,22 +119,22 @@ class Monitor extends Worker {
      * @param string $package
      * @return bool
      */
-    public function serve($package) {
+    public function serve($package)
+    {
         $content = trim($package);
 
         switch ($content) {
             case 'status':
-                $this->sendToClient($this->_status->display() . "\n");
+                $this->sendToClient($this->status->display() . "\n");
                 break;
             case 'quit':
-                $this->closeConnection($this->_currentConnection);
+                $this->closeConnection($this->currentConn);
                 break;
             case 'report':
                 $report = $this->getReport();
                 if ($report) {
                     $this->sendToClient(json_encode($report) . "\n");
-                }
-                else {
+                } else {
                     $this->sendToClient("get report failed\n");
                 }
                 break;
@@ -144,14 +150,15 @@ class Monitor extends Worker {
     /**
      * @param $message
      */
-    private function _alertAdmin($message) {
-        if (empty($this->_alertTime) || time() - $this->_alertTime > self::ALERT_INTERVAL) {
+    private function alertAdmin($message)
+    {
+        if (empty($this->lastAlert) || time() - $this->lastAlert > self::ALERT_INTERVAL) {
             $mobile = Config::getInstance()->get('master.admin.mobile');
             if ($mobile) {
-                $this->_sms->sendSms($mobile, $message);
+                $this->sms->sendSms($mobile, $message);
             }
         }
 
-        $this->_alertTime = time();
+        $this->lastAlert = time();
     }
 }

@@ -9,9 +9,10 @@ defined('NHK_PATH_ROOT') or die('No direct script access.');
  * Class Process
  *
  * @package NHK\System
- * @author fuqiang(chemila@me.com)
+ * @author  fuqiang(chemila@me.com)
  */
-class Process {
+class Process
+{
     /**
      *
      */
@@ -28,7 +29,8 @@ class Process {
     /**
      * @return int
      */
-    public static function checkProcess() {
+    public static function checkProcess()
+    {
         if (!posix_access(Env::getInstance()->getPIDFile(), POSIX_W_OK | POSIX_R_OK)) {
             return self::PROCESS_PERMISSION_ERROR;
         }
@@ -48,7 +50,8 @@ class Process {
     /**
      * @return bool|int
      */
-    public static function isMasterRunning() {
+    public static function isMasterRunning()
+    {
         $pidFile = Env::getInstance()->getPIDFile();
         $oldPid = file_get_contents($pidFile);
         if ($oldPid !== false && posix_kill(trim($oldPid), 0)) {
@@ -61,7 +64,8 @@ class Process {
     /**
      * @return bool
      */
-    public static function killMaster() {
+    public static function killMaster()
+    {
         $pid = self::checkProcess();
         if ($pid <= 0) {
             Core::alert('master pid file not exist');
@@ -72,8 +76,7 @@ class Process {
             Core::alert('kill master failed');
 
             return false;
-        }
-        else {
+        } else {
             Core::alert('force to kill master');
         }
 
@@ -83,7 +86,8 @@ class Process {
     /**
      * @param int|array $pids
      */
-    public static function forceKill($pids) {
+    public static function forceKill($pids)
+    {
         if (!is_array($pids)) {
             $pids = array($pids);
         }
@@ -101,7 +105,8 @@ class Process {
     /**
      * @return bool
      */
-    public static function reload() {
+    public static function reload()
+    {
         $pid = self::checkProcess();
         if ($pid <= 0) {
             Core::alert('master is not running');
@@ -120,7 +125,8 @@ class Process {
      * @param int $waitTime
      * @return bool
      */
-    public static function stop($waitTime = 10) {
+    public static function stop($waitTime = 10)
+    {
         $pid = self::checkProcess();
         if ($pid <= 0) {
             Core::alert('master is not running');
@@ -148,7 +154,8 @@ class Process {
     /**
      * @return bool
      */
-    public static function status() {
+    public static function status()
+    {
         $clientAddress = Config::getInstance()->get('monitor.listen');
         $sock = @stream_socket_client($clientAddress);
         if (!$sock) {
@@ -165,8 +172,7 @@ class Process {
             foreach ($reads as $fd) {
                 if ($response = fread($fd, 8192)) {
                     echo $response;
-                }
-                else {
+                } else {
                     return true;
                 }
             }
@@ -176,7 +182,8 @@ class Process {
     /**
      * @return bool
      */
-    public static function closeSTD() {
+    public static function closeSTD()
+    {
         global $STDERR, $STDOUT;
 
         if (Core::getDebugMode() && posix_ttyname(STDOUT)) {
@@ -196,7 +203,8 @@ class Process {
      * @param $title
      * @return bool
      */
-    public static function setProcessTitle($title) {
+    public static function setProcessTitle($title)
+    {
         if (extension_loaded('proctitle') && function_exists('setproctitle')) {
             @setproctitle($title);
 
