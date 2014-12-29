@@ -53,6 +53,7 @@ class Consumer
         $this->config = $this->checkConfig($config);
         $this->connect();
         $this->createChannel();
+        $this->prepare();
     }
 
     /**

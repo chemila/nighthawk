@@ -140,7 +140,6 @@ class Reporter extends Worker
             '{id}' => $id,
             '{content}' => substr($details, 0, 50),
         );
-        var_dump($data);
 
         if (!empty($mailsTo)) {
             $this->email->Subject = $config['desc'];
